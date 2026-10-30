@@ -1,0 +1,449 @@
+@{
+    var activeMenu = ViewContext.RouteData.Values["controller"]?.ToString();
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>@ViewData["Title"] — Energy7</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{--e7:#2c0e0e;--co:#e16349;--co-lt:#fff6f4;--co-hv:#cc553d;--bd:#e6cec8;--bg:#f5f3f0;--sf:#fff;--tx:#1a0e0a;--txm:#6b5e5a;--txl:#9b8e89;--ok:#1d9e75;--warn:#ba7517;--err:#c0392b;--info:#2980b9}
+    *{box-sizing:border-box}*:focus{outline:none!important;box-shadow:none!important}
+    body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);margin:0;font-size:13px}
+
+    /* ── NAV ── */
+    .e7-nav{background:var(--e7);height:50px;display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:100}
+    .e7-brand{color:#fff;font-weight:700;font-size:17px;letter-spacing:-.5px;text-decoration:none}.e7-brand span{color:var(--co)}
+    .e7-links{display:flex;gap:2px;margin-left:28px}
+    .e7-lnk{color:rgba(255,255,255,.55);text-decoration:none;padding:6px 13px;border-radius:6px;font-size:12px;font-weight:500;transition:.15s}
+    .e7-lnk:hover{color:#fff;background:rgba(255,255,255,.08)}.e7-lnk.on{color:#fff;background:var(--co)}
+    .e7-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+
+    /* ── FILTER BAR ── */
+    .sbar{background:var(--sf);border-bottom:1px solid var(--bd);padding:9px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .sbar .fg{display:flex;align-items:center;gap:6px}
+    .sbar label{font-size:10px;font-weight:600;color:var(--txm);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+    .sbar select{font-size:12px;padding:4px 26px 4px 8px;border:1px solid var(--bd);border-radius:5px;background:#fff;color:var(--tx);min-width:120px}
+    .sbar .dv{width:1px;height:26px;background:var(--bd);margin:0 2px}
+    .sbadge{display:inline-flex;align-items:center;gap:5px;background:var(--co-lt);color:var(--co);font-size:10px;font-weight:600;padding:3px 9px;border-radius:16px;margin-left:auto}
+    .sbadge .dot{width:6px;height:6px;border-radius:50%;background:var(--co)}
+
+    /* ── TABS ── */
+    .etabs{background:var(--sf);border-bottom:1px solid var(--bd);padding:0 20px;display:flex;gap:0;overflow-x:auto}
+    .etab{padding:11px 16px;font-size:12px;font-weight:500;color:var(--txm);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s;user-select:none;display:flex;align-items:center;gap:5px}
+    .etab:hover{color:var(--tx)}.etab.on{color:var(--co);border-bottom-color:var(--co);font-weight:600}
+    .etab .tc{font-size:10px;background:var(--bg);color:var(--txm);padding:1px 6px;border-radius:10px;font-weight:600}
+    .etab.on .tc{background:var(--co-lt);color:var(--co)}
+
+    /* ── TAB CONTENT ── */
+    .econt{padding:16px 20px}.tp{display:none}.tp.on{display:block}
+
+    /* ── STAT CARDS ── */
+    .sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+    .sc{background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:12px 14px}
+    .sc .sl{font-size:10px;font-weight:600;color:var(--txm);text-transform:uppercase;letter-spacing:.3px}
+    .sc .sv{font-size:24px;font-weight:700;color:var(--tx);margin-top:3px;line-height:1}
+    .sc .ss{font-size:10px;color:var(--txl);margin-top:3px}.sc.acc{border-color:var(--co);border-left:3px solid var(--co)}
+
+    /* ── INFO CARD ── */
+    .ic{background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:16px 18px;margin-bottom:14px}
+    .ic h6{font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+    .ic h6 i{color:var(--co);font-size:15px}
+    .ir{display:grid;grid-template-columns:110px 1fr;gap:3px 10px;font-size:12px;margin-bottom:5px}
+    .ir .il{font-weight:600;color:var(--txm)}.ir .iv{color:var(--tx)}
+
+    /* ── ASSETS ── */
+    .alay{display:grid;grid-template-columns:240px 1fr;gap:14px;min-height:500px}
+    .asb{background:var(--sf);border:1px solid var(--bd);border-radius:9px;overflow:hidden;display:flex;flex-direction:column}
+    .asb-h{padding:10px 12px;background:var(--co-lt);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between}
+    .asb-h h6{font-size:12px;font-weight:700;margin:0}
+    .atl{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1}
+    .ati{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;cursor:pointer;border-bottom:1px solid #f0ebe8;transition:.12s;font-size:12px}
+    .ati:hover{background:#faf7f5}.ati.on{background:var(--co-lt);color:var(--co);font-weight:600;border-left:3px solid var(--co)}
+    .ati .ac{font-size:10px;font-weight:700;background:var(--bg);padding:1px 7px;border-radius:10px;color:var(--txm)}
+    .ati.on .ac{background:var(--co);color:#fff}
+    .ati .ae{font-size:9px;font-weight:700;color:var(--err);margin-left:3px}
+    .asl{list-style:none;margin:0;padding:0;background:#fdf9f7}
+    .asl li{padding:6px 12px 6px 24px;font-size:11px;cursor:pointer;border-bottom:1px solid #f0ebe8;color:var(--txm)}
+    .asl li:hover{background:var(--co-lt)}.asl li.on{color:var(--co);font-weight:600}
+    .adp{background:var(--sf);border:1px solid var(--bd);border-radius:9px;overflow:hidden;display:flex;flex-direction:column}
+    .adp-h{padding:10px 14px;background:var(--co-lt);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .adp-h h6{font-size:13px;font-weight:700;margin:0}
+    .aig{display:flex;gap:0;flex:1;overflow:hidden}
+    .aic{width:150px;border-right:1px solid var(--bd);padding:8px 0;flex-shrink:0;display:flex;flex-direction:column}
+    .aic .ct{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--txm);padding:0 10px 6px;letter-spacing:.3px}
+    .ais{flex:1;overflow-y:auto;padding:0 10px}
+    .air{padding:5px 0;font-size:11px;cursor:pointer;display:flex;align-items:center;border-bottom:1px dashed #f0ebe8}
+    .air:hover{color:var(--co)}.air.sel{color:var(--co);font-weight:600}
+    .adi{display:flex;gap:3px;padding:5px 2px;margin-bottom:4px;border-bottom:1px solid var(--bd)}
+    .adi input{flex:1;border:1px solid var(--bd);border-radius:4px;padding:4px 6px;font-size:11px;min-width:0;width:0}
+    .adi button{background:var(--co);border:none;color:#fff;min-width:28px;width:28px;height:28px;border-radius:4px;cursor:pointer;font-size:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    .atp{flex:1;padding:14px;overflow-y:auto}
+    .ath{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+    .ath .an{font-size:14px;font-weight:700}
+    .ath .pl{font-size:10px;padding:2px 9px;border-radius:16px;border:1px solid var(--bd);background:#fff;color:var(--txm)}.ath .pl.on{background:var(--co);color:#fff;border-color:var(--co)}
+    .mode-bar{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#fdf9f7;border:1px solid #ede8e5;border-radius:6px;margin-bottom:10px}
+    .mode-lbl{font-size:10px;color:var(--txl)}.mode-lbl.on{color:var(--co);font-weight:600}
+    .mtog{position:relative;display:inline-block;width:32px;height:16px;flex-shrink:0}
+    .mtog input{opacity:0;width:0;height:0}
+    .mtog-sl{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--bd);border-radius:8px;transition:.2s}
+    .mtog-sl:before{content:"";position:absolute;height:12px;width:12px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s}
+    .mtog input:checked+.mtog-sl{background:var(--co)}
+    .mtog input:checked+.mtog-sl:before{transform:translateX(16px)}
+    .ats{background:#faf8f6;border:1px solid #ede8e5;border-radius:7px;padding:10px 12px;margin-bottom:10px}
+    .ats-t{font-size:11px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+    .ats-t .lb{font-size:9px;padding:1px 6px;background:var(--info);color:#fff;border-radius:3px;font-weight:600}
+    .loc-s{font-size:10px;padding:2px 4px;border:1px solid var(--bd);border-radius:3px;background:#fff;color:var(--tx)}
+    .stog{position:relative;display:inline-block;width:28px;height:14px;margin-left:auto;flex-shrink:0}
+    .stog input{opacity:0;width:0;height:0}
+    .stog-sl{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--bd);border-radius:7px;transition:.2s}
+    .stog-sl:before{content:"";position:absolute;height:10px;width:10px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s}
+    .stog input:checked+.stog-sl{background:var(--ok)}
+    .stog input:checked+.stog-sl:before{transform:translateX(14px)}
+    .ar{display:flex;align-items:center;gap:5px;padding:4px 0;border-bottom:1px dashed #ede8e5;font-size:11px}
+    .ar:last-child{border-bottom:none}
+    .ar input[type="checkbox"]{width:14px;height:14px;accent-color:var(--co);cursor:pointer;flex-shrink:0}
+    .ar .aname{min-width:70px;white-space:nowrap}
+    .ar .aname.na{color:var(--warn);text-decoration:line-through;font-size:10px}
+    .ar .rt-inp{width:48px;border:1px solid var(--bd);border-radius:3px;padding:2px 4px;font-size:10px;text-align:center}
+    .ar .rt-inp:focus{border-color:var(--co)}
+    .ar .loc-s-sm{font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:#fff;color:var(--tx);width:58px}
+    .ar .sv-btn{background:var(--ok);border:none;color:#fff;font-size:9px;padding:2px 6px;border-radius:3px;cursor:pointer;font-weight:600;white-space:nowrap}
+    .ar .sv-btn:hover{opacity:.85}
+
+    /* ── LOCATION ── */
+    .loc-top{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+    .cr-box{background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:12px 14px;flex:1;min-width:240px}
+    .cr-box h6{font-size:12px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:6px}
+    .cr-box h6 i{color:var(--co);font-size:14px}
+    .cr-row{display:flex;gap:6px;align-items:center}
+    .cr-row input,.cr-row select{border:1px solid var(--bd);border-radius:5px;padding:5px 8px;font-size:12px;background:#fff;color:var(--tx)}
+    .cr-row input{flex:1}
+    .loc-layout{display:flex;gap:14px}
+    .loc-pool{width:200px;background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:10px;flex-shrink:0}
+    .loc-pool h6{font-size:11px;font-weight:700;margin:0 0 8px;color:var(--txm);text-transform:uppercase;letter-spacing:.3px}
+    .loc-card{background:var(--co-lt);border:1px solid var(--bd);border-radius:6px;padding:6px 10px;margin-bottom:5px;font-size:11px;cursor:grab;display:flex;align-items:center;gap:6px;transition:all .15s}
+    .loc-card:active{cursor:grabbing}.loc-card.dragging{opacity:.4;border-color:var(--co)}
+    .loc-card .grip{color:var(--txl);font-size:11px;flex-shrink:0}
+    .loc-card .ln{flex:1;font-weight:600}.loc-card .ld{font-size:10px;color:var(--txm)}
+    .clust-area{flex:1;display:flex;flex-direction:column;gap:10px}
+    .clust-box{background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:12px;transition:border-color .2s}
+    .clust-box.drag-over{border-color:var(--co);border-width:2px}
+    .clust-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+    .clust-head .cn{font-size:14px;font-weight:700}
+    .clust-head .ct{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600}
+    .ct.group{background:#e1f5ee;color:#0f6e56}.ct.single{background:#e6f1fb;color:#185fa5}
+    .clust-drop{min-height:36px;border:1.5px dashed var(--bd);border-radius:6px;padding:6px;display:flex;flex-wrap:wrap;gap:5px;transition:background .15s}
+    .clust-drop.drag-over{background:var(--co-lt);border-color:var(--co)}
+    .clust-drop .empty-msg{font-size:10px;color:var(--txl);padding:6px;width:100%;text-align:center}
+    .clust-loc{background:var(--bg);border:1px solid var(--bd);border-radius:5px;padding:4px 8px;font-size:11px;display:flex;align-items:center;gap:5px;cursor:grab}
+    .clust-loc .cl-name{font-weight:600}.clust-loc .cl-info{font-size:9px;color:var(--txm)}
+    .cl-role{font-size:9px;padding:1px 6px;border-radius:8px;font-weight:600}
+    .cl-role.master{background:var(--co);color:#fff}.cl-role.slave{background:var(--bg);color:var(--txl);border:1px solid var(--bd)}
+    .cl-set{font-size:9px;color:var(--info);cursor:pointer;text-decoration:underline;margin-left:auto}
+    .cl-rm{font-size:13px;color:var(--txl);cursor:pointer;line-height:1}.cl-rm:hover{color:var(--err)}
+    .master-panel{background:#fdf9f7;border:1px solid #ede8e5;border-radius:7px;padding:12px 14px;margin-top:10px}
+    .master-panel h5{font-size:12px;font-weight:700;margin:0 0 10px;color:var(--co);display:flex;align-items:center;gap:5px}
+    .mp-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .mp-field label{font-size:10px;font-weight:600;color:var(--txm);display:block;margin-bottom:3px}
+    .mp-field input,.mp-field select{width:100%;border:1px solid var(--bd);border-radius:5px;padding:5px 8px;font-size:11px;background:#fff;color:var(--tx)}
+    .mp-field input[readonly]{background:#f0ebe8;color:var(--txm)}
+
+    /* ── TABLE ── */
+    .stw{background:var(--sf);border:1px solid var(--bd);border-radius:9px;overflow:hidden}
+    .stw-h{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd)}
+    .stw-h h6{font-size:13px;font-weight:700;margin:0}
+    .st{width:100%;border-collapse:collapse;font-size:11px}
+    .st thead th{background:var(--co-lt);padding:7px 8px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--tx);border-bottom:2px solid var(--bd);white-space:nowrap;position:sticky;top:0}
+    .st thead th.gh{background:#f0e0da;text-align:center;font-size:9px;color:var(--co-hv)}
+    .st tbody td{padding:6px 8px;border-bottom:1px solid #f0ebe8;vertical-align:middle}
+    .st tbody tr:hover{background:#fdfbfa}
+    .st tfoot th{background:var(--co-lt);padding:7px 8px;font-weight:700;font-size:11px;border-top:2px solid var(--bd)}
+    .st .dv{color:var(--co);font-weight:700}
+    .fst{position:fixed!important;top:0;left:0;width:100vw!important;height:100vh!important;background:#fff!important;padding:14px!important;z-index:1100!important;overflow:auto!important;border-radius:0!important}
+    .mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:9px}
+    .mc{background:var(--sf);border:1px solid var(--bd);border-radius:7px;padding:10px 12px}
+    .mc .mn{font-size:11px;font-weight:600;margin-bottom:6px}
+    .mr{display:flex;justify-content:space-between;font-size:10px;padding:2px 0;color:var(--txm)}.mr span:last-child{font-weight:700;color:var(--tx)}
+    .mb{height:3px;background:#ede8e5;border-radius:2px;margin-top:5px;overflow:hidden}
+    .mb-f{height:100%;border-radius:2px;background:var(--ok)}.mb-f.w{background:var(--warn)}.mb-f.d{background:var(--err)}
+    .dl{background:var(--sf);border:1px solid var(--bd);border-radius:9px;overflow:hidden}
+    .di{display:flex;align-items:center;padding:9px 14px;border-bottom:1px solid #f0ebe8;gap:10px}.di:last-child{border-bottom:none}
+    .di .dn{font-size:10px;font-weight:700;color:var(--txl);width:22px;text-align:center}.di .dm{flex:1;font-size:12px}
+    .ds{font-size:10px;padding:2px 9px;border-radius:16px;font-weight:600;cursor:pointer}
+    .ds.ok{background:#e1f5ee;color:#0f6e56}.ds.pn{background:#faeeda;color:#854f0b}.ds.wk{background:#e6f1fb;color:#185fa5}.ds.na{background:var(--bg);color:var(--txl)}
+
+    /* ── YARD / FOT ── */
+    .yg{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px}
+    .yi{background:var(--sf);border:1px solid var(--bd);border-radius:7px;padding:9px 12px}
+    .yi .yn{font-size:11px;font-weight:600;margin-bottom:5px}
+    .yc{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--txm);padding:1px 0}
+    .yc input{accent-color:var(--co);width:13px;height:13px}
+    .fot-group{margin-bottom:2px}
+    .fot-parent{padding:5px 4px;font-size:11px;cursor:pointer;display:flex;align-items:center;border-bottom:1px dashed #f0ebe8;background:#fff;border-radius:4px;position:relative}
+    .fot-parent:hover{color:var(--co)}.fot-parent.sel{color:var(--co);font-weight:600}
+    .fot-parent .fot-icon{font-size:9px;color:var(--txl);margin-right:3px;transition:transform .15s;width:12px;text-align:center;flex-shrink:0}
+    .fot-parent .fot-icon.open{transform:rotate(90deg)}
+    .fot-parent .fot-badge{font-size:8px;padding:0px 5px;border-radius:8px;background:var(--co-lt);color:var(--co);font-weight:600;margin-left:auto}
+    .fot-children{padding-left:16px;border-left:2px solid var(--co-lt);margin-left:8px;display:none}
+    .fot-children.open{display:block}
+    .fot-child{padding:4px 4px;font-size:10px;cursor:pointer;display:flex;align-items:center;gap:4px;border-bottom:1px dotted #ede8e5;color:var(--txm)}
+    .fot-child:hover{color:var(--co)}.fot-child.sel{color:var(--co);font-weight:600}
+    .fot-child .fc-line{width:10px;border-top:1px solid var(--bd);flex-shrink:0}
+    .fot-child .fc-rm{font-size:11px;color:var(--txl);cursor:pointer;margin-left:auto;line-height:1}.fot-child .fc-rm:hover{color:var(--err)}
+    .fot-child .fc-tag{font-size:8px;color:var(--txl);margin-left:2px}
+    .air{position:relative}.air.drag-over-fot{outline:2px solid var(--co);outline-offset:-2px;background:var(--co-lt);border-radius:3px}
+    .ftu-badge{font-size:9px;padding:2px 7px;border-radius:8px;background:#e1f5ee;color:#085041;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:3px;margin-left:auto;border:1px solid #9fe1cb;transition:all .15s}
+    .ftu-badge:hover{background:#085041;color:#fff}.ftu-badge.manual{background:#faeeda;color:#854f0b;border-color:#fac775}
+    .ftu-edit{display:none;background:#faf8f6;border:1px solid #ede8e5;border-radius:6px;padding:10px 12px;margin-top:6px;font-size:11px}
+    .ftu-edit.open{display:block}
+    .ftu-edit-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+    .ftu-edit-row label{font-size:10px;font-weight:600;color:var(--txm);width:50px;flex-shrink:0}
+    .ftu-edit-row select,.ftu-edit-row input[type=number]{border:1px solid var(--bd);border-radius:4px;padding:3px 6px;font-size:11px;background:#fff;color:var(--tx);width:70px}
+    .loc-card-wrap{margin-bottom:5px}
+    .loc-card-inner{background:var(--co-lt);border:1px solid var(--bd);border-radius:6px;padding:6px 10px;font-size:11px;cursor:grab;display:flex;align-items:center;gap:6px;transition:all .15s}
+    .loc-card-inner:active{cursor:grabbing}.loc-card-inner.dragging{opacity:.4;border-color:var(--co)}
+    .clust-loc-wrap{margin-bottom:4px}
+    .clust-loc-inner{background:var(--bg);border:1px solid var(--bd);border-radius:5px;padding:4px 8px;font-size:11px;display:flex;align-items:center;gap:5px;cursor:grab}
+
+    /* ── BUTTONS ── */
+    .be7{background:var(--co);color:#fff;border:none;font-size:11px;font-weight:600;padding:5px 14px;border-radius:5px;cursor:pointer;transition:.15s}
+    .be7:hover{background:var(--co-hv);color:#fff}
+    .bg7{background:transparent;border:1px solid var(--bd);color:var(--txm);font-size:11px;padding:4px 12px;border-radius:5px;cursor:pointer}.bg7:hover{border-color:var(--txm)}
+
+    /* ── MODAL ── */
+    .modal-content{border-radius:11px;border:none}
+    .modal-header{background:var(--co-lt);border-bottom:1px solid var(--bd);border-radius:11px 11px 0 0;padding:12px 18px}
+    .modal-title{font-size:14px;font-weight:700}
+    .modal-body{padding:18px}.modal-body label{font-size:11px;font-weight:600;color:var(--txm);margin-bottom:3px}
+    .modal-body .form-control,.modal-body .form-select{font-size:12px;border-color:var(--bd);border-radius:5px}
+
+    /* ── RESPONSIVE ── */
+    @@media(max-width:768px){.alay{grid-template-columns:1fr}.sgrid{grid-template-columns:1fr 1fr}.e7-links{display:none}.econt{padding:10px}.loc-layout{flex-direction:column}.mp-grid{grid-template-columns:1fr 1fr}}
+  </style>
+</head>
+<body>
+
+<!-- ═══ TOP NAVBAR ═══ -->
+<nav class="e7-nav">
+  <a href="/" class="e7-brand">Energy<span>7</span></a>
+  <div class="e7-links">
+    <a href="#" class="e7-lnk">Dashboard</a>
+    <a href="/Station" class="e7-lnk @(activeMenu == "Station" ? "on" : "")">Station</a>
+    <a href="/ProjectProgress" class="e7-lnk @(activeMenu == "ProjectProgress" ? "on" : "")">Project Progress</a>
+    <a href="#" class="e7-lnk">Execution</a>
+    <a href="#" class="e7-lnk">Quality</a>
+    <a href="#" class="e7-lnk">Reports</a>
+  </div>
+  <div class="e7-right">
+    <button class="be7" data-bs-toggle="modal" data-bs-target="#newStationModal">
+      <i class="bi bi-plus-lg me-1"></i>New Station
+    </button>
+    <div class="dropdown">
+      <a href="#" class="text-white" data-bs-toggle="dropdown">
+        <i class="bi bi-person-circle" style="font-size:20px;opacity:.7"></i>
+      </a>
+      <ul class="dropdown-menu dropdown-menu-end" style="font-size:12px">
+        <li><a class="dropdown-item" href="#">Profile</a></li>
+        <li><a class="dropdown-item" href="#">Settings</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item text-danger" href="#">Logout</a></li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Page body -->
+@RenderBody()
+
+<!-- ═══ NEW STATION MODAL ═══ -->
+    <!-- ═══ NEW STATION MODAL ═══ -->
+    <div class="modal fade" id="newStationModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-building me-2" style="color:var(--co)"></i>New Station</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="nsId" value="0" />
+
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label>Zone <span class="text-danger">*</span></label>
+                            <select class="form-select" id="nsZone"></select>
+                        </div>
+                        <div class="col-6">
+                            <label>Division <span class="text-danger">*</span></label>
+                            <select class="form-select" id="nsDivision"></select>
+                        </div>
+
+                        <div class="col-12">
+                            <label>Station Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="nsName" placeholder="e.g. Palwal">
+                        </div>
+
+                        <div class="col-12">
+                            <label>Description</label>
+                            <textarea class="form-control" id="nsDesc" rows="2"></textarea>
+                        </div>
+
+                        <div class="col-6">
+                            <label>MQTT Base Path <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="nsMQTTBase">
+                        </div>
+                        <div class="col-3">
+                            <label>MQTT Channels <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="nsMQTTChannels" value="0">
+                        </div>
+                        <div class="col-3">
+                            <label>MQTT Active Threshold <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="nsMQTTActive" value="0">
+                        </div>
+
+                        <div class="col-12">
+                            <label>Mac Id <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="nsMACId">
+                        </div>
+
+                        <div class="col-12" style="display:flex;gap:16px;flex-wrap:wrap">
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:500">
+                                <input type="checkbox" id="nsIsActive" checked> Is Active
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:500">
+                                <input type="checkbox" id="nsIsSetupLocalSite"> Is Setup Local Site
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:500">
+                                <input type="checkbox" id="nsIsEIEnable"> Is EI Enable
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:500">
+                                <input type="checkbox" id="nsIsUnderDev"> Is Under Development
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:var(--co)">
+                                <input type="checkbox" id="nsIsProject" checked> Is Project
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top:1px solid var(--bd);padding:10px 18px">
+                    <button class="bg7" data-bs-dismiss="modal">Cancel</button>
+                    <button class="be7" id="btnCreateStation" onclick="saveNewStation()">Create Station</button>
+                </div>
+            </div>
+        </div>
+    </div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ── Load zones when modal opens ────────────────────────────────────────
+        document.getElementById('newStationModal').addEventListener('show.bs.modal', function () {
+            resetNewStationForm();
+            loadModalZones();
+        });
+
+        function resetNewStationForm() {
+            document.getElementById('nsId').value = 0;
+            document.getElementById('nsName').value = '';
+            document.getElementById('nsDesc').value = '';
+            document.getElementById('nsMQTTBase').value = '';
+            document.getElementById('nsMQTTChannels').value = 0;
+            document.getElementById('nsMQTTActive').value = 0;
+            document.getElementById('nsMACId').value = '';
+            document.getElementById('nsIsActive').checked = true;
+            document.getElementById('nsIsSetupLocalSite').checked = false;
+            document.getElementById('nsIsEIEnable').checked = false;
+            document.getElementById('nsIsUnderDev').checked = false;
+            document.getElementById('nsIsProject').checked = true;   // default for this dashboard
+        }
+
+        function loadModalZones() {
+            fetch('/Station/GetZonesJson')
+                .then(r => r.json())
+                .then(data => {
+                    var dd = document.getElementById('nsZone');
+                    dd.innerHTML = '<option value="0">Select Zone</option>';
+                    (data || []).forEach(function (z) {
+                        dd.innerHTML += '<option value="' + z.id + '">' + z.name + '</option>';
+                    });
+                    document.getElementById('nsDivision').innerHTML = '<option value="0">Select Division</option>';
+                })
+                .catch(() => { /* ignore */ });
+        }
+
+        // ── Zone → Division cascade inside modal ───────────────────────────────
+        document.getElementById('nsZone').addEventListener('change', function () {
+            var zoneId = this.value;
+            var dd = document.getElementById('nsDivision');
+            dd.innerHTML = '<option value="0">Select Division</option>';
+            if (!zoneId || zoneId == 0) return;
+
+            fetch('/Station/GetDivisionByZoneId?zoneId=' + zoneId)
+                .then(r => r.json())
+                .then(data => {
+                    (data || []).forEach(function (d) {
+                        dd.innerHTML += '<option value="' + d.id + '">' + d.name + '</option>';
+                    });
+                });
+        });
+
+        // ── Save ───────────────────────────────────────────────────────────────
+        function saveNewStation() {
+            var zone  = parseInt(document.getElementById('nsZone').value, 10) || 0;
+            var divId = parseInt(document.getElementById('nsDivision').value, 10) || 0;
+            var name  = document.getElementById('nsName').value.trim();
+            var mqtt  = document.getElementById('nsMQTTBase').value.trim();
+
+            if (zone  === 0) { alert('Select Zone');          return; }
+            if (divId === 0) { alert('Select Division');      return; }
+            if (!name)       { alert('Enter Station Name');   return; }
+            if (!mqtt)       { alert('Enter MQTT Base Path'); return; }
+
+            var payload = {
+                Id:                parseInt(document.getElementById('nsId').value, 10) || 0,
+                ZoneId:            zone,
+                DivisionId:        divId,
+                Name:              name,
+                Description:       document.getElementById('nsDesc').value,
+                MQTTBasePath:      mqtt,
+                MQTTNoOfChannels:  parseInt(document.getElementById('nsMQTTChannels').value, 10) || 0,
+                MQTTActiveChannel: parseInt(document.getElementById('nsMQTTActive').value, 10)   || 0,
+                MACId:             document.getElementById('nsMACId').value,
+                IsActive:          document.getElementById('nsIsActive').checked,
+                IsSetupLocalSite:  document.getElementById('nsIsSetupLocalSite').checked,
+                IsEIEnable:        document.getElementById('nsIsEIEnable').checked,
+                IsUnderDevlopment: document.getElementById('nsIsUnderDev').checked,
+                IsTestUser:         document.getElementById('nsIsProject').checked
+            };
+
+            var btn = document.getElementById('btnCreateStation');
+            btn.disabled = true; btn.textContent = 'Saving…';
+
+            fetch('/Station/SaveSite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res && res.error) {
+                    alert(res.error);
+                } else {
+                    var m = bootstrap.Modal.getInstance(document.getElementById('newStationModal'));
+                    if (m) m.hide();
+                    location.reload();   // simplest: refresh so dropdown picks up the new station
+                }
+            })
+            .catch(() => alert('Save failed'))
+            .finally(() => {
+                btn.disabled = false; btn.textContent = 'Create Station';
+            });
+        }
+    </script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

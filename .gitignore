@@ -1,0 +1,27 @@
+# Visual Studio
+.vs/
+**/.vs/
+
+# Build folders
+bin/
+**/bin/
+obj/
+**/obj/
+
+# Packages
+packages/
+**/packages/
+
+# User settings
+*.user
+*.suo
+
+# Temporary files
+*.tmp
+*.log
+
+
+
+
+
+

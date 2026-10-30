@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RDPMS Project Progress</title>
+<style>
+:root{
+  --bg:#f7f2ea;--panel:#fffdf9;--panel2:#fbf6ee;--fg:#2b2622;--muted:#8a7f73;--line:#eadfce;--line2:#f0e6d8;
+  --accent:#1e7a4c;--accent-fg:#ffffff;--accent-soft:#e3f1e8;
+  --ok:#1f7a45;--ok-bg:#dcefe2;--ok-bg2:#cfe8d7;--warn:#c2410c;--warn-bg:#fdeee2;--warn-soft:#fff5ec;--zero:#b9ada0;
+  --bad:#b42318;--chip:#f3ebe0;--radius:12px;--overlay:rgba(43,38,34,.4);--shadow:0 1px 2px rgba(60,40,20,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14120f;--panel:#1c1915;--panel2:#221e1a;--fg:#ece6dd;--muted:#a39888;--line:#332d26;--line2:#2a251f;
+    --accent:#4cc27e;--accent-fg:#0d1a12;--accent-soft:#1b2e22;
+    --ok:#5fd18c;--ok-bg:#1a3123;--ok-bg2:#1f3a29;--warn:#ff9a5c;--warn-bg:#3a2416;--warn-soft:#2a1d14;--zero:#5e554b;
+    --bad:#ff7a6b;--chip:#2a251f;--overlay:rgba(0,0,0,.6);--shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14120f;--panel:#1c1915;--panel2:#221e1a;--fg:#ece6dd;--muted:#a39888;--line:#332d26;--line2:#2a251f;
+  --accent:#4cc27e;--accent-fg:#0d1a12;--accent-soft:#1b2e22;
+  --ok:#5fd18c;--ok-bg:#1a3123;--ok-bg2:#1f3a29;--warn:#ff9a5c;--warn-bg:#3a2416;--warn-soft:#2a1d14;--zero:#5e554b;
+  --bad:#ff7a6b;--chip:#2a251f;--overlay:rgba(0,0,0,.6);--shadow:none;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
+.wrap{max-width:1480px;margin:0 auto;padding:14px 16px 40px}
+/* top bar */
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:18px;font-weight:700}
+.saved{font-size:12px;color:var(--muted)}
+.group{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;font-size:12.5px;font-weight:600;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.btn.danger{color:var(--bad)}
+.btn.icon{padding:4px 9px;min-width:30px;font-size:15px;line-height:1}
+.seg{display:inline-flex;background:var(--chip);border-radius:9px;padding:3px;gap:2px}
+.seg .btn{border:none;background:transparent;padding:5px 10px}
+.seg .btn[aria-pressed=true]{background:var(--panel);box-shadow:var(--shadow)}
+/* filters */
+.filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+@media (max-width:820px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label,.lbl{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+select,input[type=search],input[type=text],input[type=number],input[type=date],textarea{font:inherit;font-size:14px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:9px;padding:8px 10px;max-width:100%;width:100%}
+.filters select{font-weight:600}
+textarea{min-height:64px;resize:vertical}
+.board{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:12px}
+/* project detail strip */
+.strip{border:1px solid #f1c9a5;background:var(--panel);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+:root[data-theme="dark"] .strip{border-color:var(--line)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .strip{border-color:var(--line)}}
+.strip-h{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.strip-t{font-size:16px;font-weight:700;margin:0}
+.strip-t small{font-weight:500;color:var(--muted);font-size:12px;margin-left:6px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;background:var(--chip);color:var(--fg);border-radius:6px;padding:2px 8px}
+.chip.k{color:var(--muted);font-weight:500}
+.chip.ok{background:var(--ok-bg);color:var(--ok)}
+.chip.warn{background:var(--warn-bg);color:var(--warn)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+@media (max-width:700px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stat{background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:8px 12px}
+.stat .l{font-size:11.5px;color:var(--muted)}
+.stat .v{font-size:22px;font-weight:700;margin-top:1px}
+.stat .v small{font-size:13px;color:var(--muted);font-weight:500}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,15rem),1fr));gap:10px;margin-top:12px}
+.pcard{background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.pcard:hover{border-color:var(--muted)}
+.pcard .n{font-weight:700;font-size:13px}
+.pcard .m{font-size:12px;color:var(--muted);margin:2px 0 6px}
+.bar{height:6px;background:var(--line2);border-radius:999px;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:999px;background:var(--warn)}
+.bar>i.full{background:var(--ok)}
+/* station detail */
+.detail{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,11.5rem),1fr));gap:8px;margin-top:10px}
+.tile{border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:5px;background:var(--panel2)}
+.tile.ok{border-color:var(--ok);background:var(--ok-bg)}
+.tile.now{border-color:var(--warn);box-shadow:0 0 0 1px var(--warn)}
+.tile .t{font-size:12px;color:var(--muted);font-weight:700}
+.tile .r{font-size:11.5px;color:var(--muted)}
+.stepper{display:flex;align-items:center;gap:4px}
+.stepper input{flex:1 1 auto;width:auto;min-width:2.6rem;text-align:center;font-size:18px;font-weight:700;padding:3px}
+.stepper .of{font-size:14px;color:var(--muted);white-space:nowrap}
+.stepper .btn{flex:none}
+/* matrix */
+.mx-wrap{overflow:auto;max-height:78vh;border-radius:10px}
+table.mx{border-collapse:separate;border-spacing:4px;width:100%;min-width:max-content}
+.mx th{position:sticky;top:0;z-index:2;background:var(--panel2);text-align:left;font-size:12px;font-weight:700;color:var(--muted);padding:6px 10px;white-space:nowrap;cursor:pointer;user-select:none;border-bottom:1px solid var(--line)}
+.mx th .tot{display:block;color:var(--fg);font-weight:700;font-size:13px}
+.mx th .pc{display:block;font-weight:500;font-size:11px;color:var(--muted)}
+.mx th[aria-sort=ascending] .lb::after{content:" ▲";font-size:9px}
+.mx th[aria-sort=descending] .lb::after{content:" ▼";font-size:9px}
+.mx th.first,.mx td.first{position:sticky;left:0;z-index:1;background:var(--panel2)}
+.mx th.first{z-index:3}
+.mx td.first{min-width:13rem;max-width:18rem;padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer;vertical-align:top}
+.mx td.first:hover .sn{text-decoration:underline}
+.mx tr.sel td.first{box-shadow:inset 3px 0 0 var(--accent)}
+.sn{font-weight:700;font-size:15px}
+.sn .code{font-weight:500;color:var(--muted);font-size:12px;margin-left:5px}
+.ss{font-size:11.5px;color:var(--muted);margin-top:1px}
+.badge{display:inline-block;margin-top:5px;font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.badge.zero{background:var(--chip);color:var(--muted)}
+.mx td.c{min-width:6rem;height:60px;text-align:center;vertical-align:middle;border-radius:10px;cursor:pointer;border:1px dashed var(--line);background:var(--panel);transition:box-shadow .15s}
+.mx td.c:hover{box-shadow:0 0 0 2px var(--accent) inset}
+.mx td.c.ok{background:var(--ok-bg);border:1px solid transparent}
+.mx td.c.warn{background:var(--warn-soft);border:1px solid var(--warn-bg)}
+.mx td.c .v{font-size:18px;font-weight:700;line-height:1.1}
+.mx td.c.ok .v{color:var(--ok)}
+.mx td.c.warn .v{color:var(--warn)}
+.mx td.c.zero .v{color:var(--zero);font-weight:500}
+.mx td.c .of{font-size:12px;font-weight:500;color:var(--muted)}
+.sq{display:flex;gap:3px;justify-content:center;margin-top:5px}
+.sq i{width:6px;height:6px;border-radius:1.5px;background:var(--line)}
+.c.ok .sq i.on{background:var(--ok)}
+.c.warn .sq i.on{background:var(--warn)}
+.mx td.ov{min-width:6.5rem;text-align:center;vertical-align:middle;border-radius:10px;background:var(--panel)}
+.mx td.ov .v{font-size:16px;font-weight:700}
+.mx td.ov .s{font-size:11px;color:var(--muted)}
+.mx tr.grp td{padding:12px 6px 4px;font-weight:700;font-size:13px;background:transparent;position:static}
+.mx tr.grp td .m{font-weight:500;color:var(--muted);font-size:12px;margin-left:8px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.lg-ok::before{background:var(--ok)}.lg-warn::before{background:var(--warn)}.lg-zero::before{border:1px dashed var(--muted)}
+.mx-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:2px 4px 6px}
+.mx-head h3{margin:0;font-size:14px}
+.empty{color:var(--muted);text-align:center;padding:30px}
+.foot{color:var(--muted);font-size:12px;margin:8px 4px 0}
+/* dialogs */
+dialog{border:1px solid var(--line);border-radius:14px;padding:0;background:var(--panel);color:var(--fg);width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 32px);box-shadow:0 20px 50px rgba(0,0,0,.25)}
+dialog.small{width:min(380px,calc(100vw - 32px))}
+dialog::backdrop{background:var(--overlay)}
+.dlg{display:flex;flex-direction:column;max-height:calc(100vh - 34px)}
+.dlg-h{padding:14px 18px 10px;border-bottom:1px solid var(--line)}
+.dlg-h h2{margin:0;font-size:16px}
+.dlg-b{padding:14px 18px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.dlg-f{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.dlg-f .right{display:flex;gap:8px;margin-left:auto}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.grid2{grid-template-columns:1fr}}
+.req::after{content:" *";color:var(--bad)}
+.stage-list{display:flex;flex-direction:column;gap:6px}
+.stage-row{display:grid;grid-template-columns:2rem 1fr auto auto auto;gap:6px;align-items:start;padding:6px 0;border-bottom:1px solid var(--line2)}
+.stage-row .names{display:flex;flex-direction:column;gap:4px}
+.stage-row .names input.itx{font-size:12.5px;padding:6px 9px}
+.items{margin-top:6px;display:flex;flex-direction:column;gap:2px;text-align:left;font-size:11px;line-height:1.35}
+.it{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:1px 6px;border-radius:5px;background:color-mix(in srgb,var(--panel) 75%,transparent)}
+.it .in{font-weight:600;color:var(--fg);white-space:nowrap}
+.it .iv{font-weight:700;white-space:nowrap}
+.it.ok .iv{color:var(--ok)}.it.warn .iv{color:var(--warn)}.it.zero .iv{color:var(--muted)}.it.na .iv{color:var(--zero);font-weight:500}
+.it-note{font-size:10.5px;font-weight:600;color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent);border-radius:4px;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:11rem}
+.mx td.c.has-items{vertical-align:top;padding:7px 6px 8px;min-width:8.5rem;height:auto}
+.tile .items{margin-top:2px}
+.tile .it-note{max-width:none;white-space:normal}
+.irow{display:grid;grid-template-columns:minmax(4rem,1fr) 4.4rem auto 4.4rem minmax(6rem,1.6fr) auto;gap:6px;align-items:center}
+.irow .nm{font-weight:700;font-size:13px}
+.irow input{padding:6px 7px;font-size:13px}
+.irow .sl{color:var(--muted)}
+.irow-h{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+@media (max-width:520px){.irow{grid-template-columns:3.5rem 3.6rem auto 3.6rem 1fr auto}}
+.itemsbox{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:6px}
+.stage-row .ix{color:var(--muted);font-size:12px;text-align:center}
+.stage-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,9rem),1fr));gap:10px}
+.hint{font-size:12px;color:var(--muted)}
+.err{color:var(--bad);font-size:12px;min-height:1em}
+.big-step{display:flex;align-items:center;gap:6px;justify-content:center}
+.big-step input{width:6rem;text-align:center;font-size:26px;font-weight:700}
+.big-step .of{font-size:18px;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:10}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="group">
+      <button class="btn primary" id="newProjectBtn">+ New project</button>
+      <button class="btn primary" id="newStationBtn">+ Add station</button>
+      <button class="btn" id="stagesBtn">Edit stages</button>
+    </div>
+    <div class="group">
+      <button class="btn" id="importBtn" title="Import a CSV sheet or a JSON backup">Import</button>
+      <input type="file" id="file" accept=".csv,.json,text/csv,application/json" hidden>
+      <button class="btn" id="exportCsvBtn">Export CSV</button>
+      <button class="btn" id="backupBtn" title="Full backup: projects, stations and stages">Backup JSON</button>
+      <button class="btn" id="resetBtn">Reset to sample</button>
+      <div class="seg" role="group" aria-label="Theme">
+        <button class="btn" data-theme-set="light">Paper</button>
+        <button class="btn" data-theme-set="dark">Dark</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="brand" style="margin-bottom:10px">
+    <h1>RDPMS Project Progress</h1>
+    <span class="saved" id="savedState"></span>
+  </div>
+
+  <div class="filters">
+    <div class="field"><label for="fProject">Project</label><select id="fProject"></select></div>
+    <div class="field"><label for="fZone">Zone</label><select id="fZone"></select></div>
+    <div class="field"><label for="fDivision">Division</label><select id="fDivision"></select></div>
+    <div class="field"><label for="fStation">Station</label><select id="fStation"></select></div>
+  </div>
+
+  <div class="board">
+    <section class="strip" id="strip"></section>
+    <section class="detail" id="detail" hidden></section>
+
+    <div class="mx-head">
+      <h3 id="mxTitle">Stations</h3>
+      <div class="legend"><span class="lg-ok">Complete</span><span class="lg-warn">In progress</span><span class="lg-zero">Not started</span></div>
+    </div>
+    <div class="mx-wrap"><table class="mx" id="mx"></table></div>
+    <div class="foot">Click a number to update it. Click a station name to open its detail. Click a stage header to sort.</div>
+  </div>
+</div>
+
+<!-- Project dialog -->
+<dialog id="projectDlg">
+  <form class="dlg" method="dialog" id="projectForm">
+    <div class="dlg-h"><h2 id="projectDlgTitle">New project</h2></div>
+    <div class="dlg-b">
+      <div class="field"><label class="req" for="pfName">Project name</label><input type="text" id="pfName" required></div>
+      <div class="grid2">
+        <div class="field"><label for="pfZone">Zone</label><input type="text" id="pfZone" list="zoneList" placeholder="e.g. ECR"></div>
+        <div class="field"><label for="pfDivision">Division</label><input type="text" id="pfDivision" list="divList" placeholder="e.g. Dhanbad"></div>
+        <div class="field"><label for="pfWo">Work order / LOA no.</label><input type="text" id="pfWo"></div>
+        <div class="field"><label for="pfClient">Client / contact</label><input type="text" id="pfClient"></div>
+        <div class="field"><label for="pfStart">Start date</label><input type="date" id="pfStart"></div>
+        <div class="field"><label for="pfTarget">Target completion</label><input type="date" id="pfTarget"></div>
+      </div>
+      <div class="field"><label for="pfNotes">Notes</label><textarea id="pfNotes"></textarea></div>
+      <div class="err" id="pfErr"></div>
+    </div>
+    <div class="dlg-f">
+      <button type="button" class="btn danger" id="pfDelete">Delete project</button>
+      <div class="right"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary">Save project</button></div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Station dialog -->
+<dialog id="stationDlg">
+  <form class="dlg" method="dialog" id="stationForm">
+    <div class="dlg-h"><h2 id="stationDlgTitle">Add station</h2></div>
+    <div class="dlg-b">
+      <div class="field"><label class="req" for="sfProject">Project</label><select id="sfProject"></select></div>
+      <div class="grid2">
+        <div class="field"><label for="sfZone">Zone</label><input type="text" id="sfZone" list="zoneList"></div>
+        <div class="field"><label for="sfDivision">Division</label><input type="text" id="sfDivision" list="divList"></div>
+        <div class="field"><label class="req" for="sfStation">Station name</label><input type="text" id="sfStation" required></div>
+        <div class="field"><label for="sfCode">Station code</label><input type="text" id="sfCode" placeholder="e.g. DHN"></div>
+        <div class="field"><label class="req" for="sfTarget">Target clusters</label><input type="number" id="sfTarget" min="0" step="1" required></div>
+      </div>
+      <div><div class="lbl" style="margin-bottom:6px">Clusters done per stage</div><div class="stage-grid" id="sfStages"></div></div>
+      <div class="err" id="sfErr"></div>
+    </div>
+    <div class="dlg-f">
+      <button type="button" class="btn danger" id="sfDelete">Delete station</button>
+      <div class="right"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary">Save station</button></div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Stages dialog -->
+<dialog id="stagesDlg">
+  <form class="dlg" method="dialog" id="stagesForm">
+    <div class="dlg-h"><h2>Edit stages</h2><div class="hint" style="margin-top:4px">Rename, reorder, add or remove stages. They apply to every project.</div></div>
+    <div class="dlg-b"><div class="stage-list" id="stList"></div><div><button type="button" class="btn" id="stAdd">+ Add stage</button></div><div class="err" id="stErr"></div></div>
+    <div class="dlg-f"><div class="right"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary">Save stages</button></div></div>
+  </form>
+</dialog>
+
+<!-- Quick cell edit -->
+<dialog id="cellDlg" style="width:min(620px,calc(100vw - 32px))">
+  <form class="dlg" method="dialog" id="cellForm">
+    <div class="dlg-h"><h2 id="cellTitle"></h2><div class="hint" id="cellSub" style="margin-top:2px"></div></div>
+    <div class="dlg-b">
+      <div class="big-step">
+        <button type="button" class="btn icon" id="cMinus" aria-label="Decrease">−</button>
+        <input type="number" id="cVal" min="0" step="1" aria-label="Clusters done">
+        <span class="of" id="cOf"></span>
+        <button type="button" class="btn icon" id="cPlus" aria-label="Increase">+</button>
+      </div>
+      <div class="group" style="justify-content:center">
+        <button type="button" class="btn" id="cZero">Set 0</button>
+        <button type="button" class="btn" id="cFull">Set complete</button>
+      </div>
+      <div class="itemsbox">
+        <div class="lbl">Items in this stage <span class="hint" style="text-transform:none;letter-spacing:0;font-weight:400">— done / total, with a remark if something is missing</span></div>
+        <div id="cItems" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="group"><input type="text" id="cNewItem" placeholder="New item, e.g. TF" style="width:auto;flex:1;min-width:8rem"><button type="button" class="btn" id="cAddItem">+ Add item</button></div>
+        <div class="hint">Items are shared by every station in this stage. Leave total at 0 where an item does not apply.</div>
+      </div>
+    </div>
+    <div class="dlg-f"><div class="right"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary">Save</button></div></div>
+  </form>
+</dialog>
+
+<datalist id="zoneList"></datalist>
+<datalist id="divList"></datalist>
+<div class="toast" id="toast"></div>
+
+<script>
+// =========================================================================
+// DATA — everything lives in one object (DB), saved in this browser.
+// To use your own server, define window.RDPMS_API = { load: async () => db,
+// save: async (db) => {} } before this script.
+// =========================================================================
+const SAMPLE = {"version":2,"stageOrderV":3,"stages":[{"id":"st_survey","name":"Survey","items":[]},{"id":"st_fitting","name":"Fitting","items":[]},{"id":"st_networking","name":"Networking","items":[]},{"id":"st_wiring","name":"Wiring","items":[]},{"id":"st_termination","name":"Termination","items":[{"id":"it_indoor","name":"Indoor"},{"id":"it_tf","name":"TF"},{"id":"it_tr","name":"TR"},{"id":"it_signal","name":"Signal"},{"id":"it_shunt","name":"Shunt"},{"id":"it_point","name":"Point"},{"id":"it_tpr","name":"TPR"}]},{"id":"st_validation","name":"Validation","items":[{"id":"it_indoor","name":"Indoor"},{"id":"it_tf","name":"TF"},{"id":"it_tr","name":"TR"},{"id":"it_signal","name":"Signal"},{"id":"it_shunt","name":"Shunt"},{"id":"it_point","name":"Point"},{"id":"it_tpr","name":"TPR"}]},{"id":"st_calibration","name":"Calibration","items":[]},{"id":"st_alert_test","name":"Alert test","items":[]}],"projects":[{"id":"p_1","name":"WR Mumbai Division RDPMS","workOrder":"","client":"","notes":"Sample project","zone":"WR","division":"Mumbai Central","startDate":"2025-10-01","targetDate":"2026-12-31"},{"id":"p_2","name":"NWR Jaipur Division RDPMS","workOrder":"","client":"","notes":"Sample project","zone":"NWR","division":"Jaipur","startDate":"2025-08-01","targetDate":"2025-11-30"},{"id":"p_3","name":"ECR RDPMS (Danapur & Dhanbad)","workOrder":"","client":"","notes":"Sample project","zone":"ECR","division":"Danapur, Dhanbad","startDate":"2025-07-15","targetDate":"2026-12-31"},{"id":"p_4","name":"WCR Kota Division RDPMS","workOrder":"","client":"","notes":"Sample project","zone":"WCR","division":"Kota","startDate":"2025-06-01","targetDate":"2025-08-31"},{"id":"p_5","name":"SECR Raipur Division RDPMS","workOrder":"","client":"","notes":"Sample project","zone":"SECR","division":"Raipur","startDate":"2026-04-01","targetDate":"2026-06-30"}],"stations":[{"id":"s_1","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Bilimora","code":"","target":18,"done":{"st_survey":18,"st_fitting":18,"st_networking":18,"st_wiring":18,"st_termination":18,"st_validation":18,"st_calibration":18,"st_alert_test":18},"items":{"st_termination":{"it_indoor":{"done":3,"total":3,"note":""},"it_tf":{"done":28,"total":28,"note":""},"it_tr":{"done":28,"total":28,"note":""},"it_signal":{"done":22,"total":22,"note":""},"it_shunt":{"done":11,"total":11,"note":""},"it_point":{"done":28,"total":28,"note":""},"it_tpr":{"done":28,"total":28,"note":""}},"st_validation":{"it_indoor":{"done":3,"total":3,"note":""},"it_tf":{"done":28,"total":28,"note":""},"it_tr":{"done":28,"total":28,"note":""},"it_signal":{"done":22,"total":22,"note":""},"it_shunt":{"done":11,"total":11,"note":""},"it_point":{"done":28,"total":28,"note":""},"it_tpr":{"done":28,"total":28,"note":""}}}},{"id":"s_2","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Vapi","code":"","target":24,"done":{"st_survey":24,"st_fitting":24,"st_networking":24,"st_wiring":24,"st_termination":24,"st_validation":24,"st_calibration":24,"st_alert_test":24},"items":{"st_termination":{"it_indoor":{"done":4,"total":4,"note":""},"it_tf":{"done":34,"total":34,"note":""},"it_tr":{"done":34,"total":34,"note":""},"it_signal":{"done":26,"total":26,"note":""},"it_shunt":{"done":13,"total":13,"note":""},"it_point":{"done":36,"total":36,"note":""},"it_tpr":{"done":34,"total":34,"note":""}},"st_validation":{"it_indoor":{"done":4,"total":4,"note":""},"it_tf":{"done":34,"total":34,"note":""},"it_tr":{"done":34,"total":34,"note":""},"it_signal":{"done":26,"total":26,"note":""},"it_shunt":{"done":13,"total":13,"note":""},"it_point":{"done":36,"total":36,"note":""},"it_tpr":{"done":34,"total":34,"note":""}}}},{"id":"s_3","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Karambeli","code":"","target":14,"done":{"st_survey":14,"st_fitting":14,"st_networking":14,"st_wiring":14,"st_termination":14,"st_validation":14,"st_calibration":14,"st_alert_test":14},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":22,"total":22,"note":""},"it_tr":{"done":22,"total":22,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":22,"total":22,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":22,"total":22,"note":""},"it_tr":{"done":22,"total":22,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":22,"total":22,"note":""}}}},{"id":"s_4","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Vaitarna","code":"","target":16,"done":{"st_survey":16,"st_fitting":16,"st_networking":16,"st_wiring":16,"st_termination":16,"st_validation":16,"st_calibration":16,"st_alert_test":16},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":24,"total":24,"note":""},"it_tr":{"done":24,"total":24,"note":""},"it_signal":{"done":18,"total":18,"note":""},"it_shunt":{"done":9,"total":9,"note":""},"it_point":{"done":24,"total":24,"note":""},"it_tpr":{"done":24,"total":24,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":24,"total":24,"note":""},"it_tr":{"done":24,"total":24,"note":""},"it_signal":{"done":18,"total":18,"note":""},"it_shunt":{"done":9,"total":9,"note":""},"it_point":{"done":24,"total":24,"note":""},"it_tpr":{"done":24,"total":24,"note":""}}}},{"id":"s_5","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Pardi","code":"","target":15,"done":{"st_survey":15,"st_fitting":15,"st_networking":15,"st_wiring":15,"st_termination":15,"st_validation":15,"st_calibration":15,"st_alert_test":15},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":20,"total":20,"note":""},"it_tr":{"done":20,"total":20,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":20,"total":20,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":20,"total":20,"note":""},"it_tr":{"done":20,"total":20,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":20,"total":20,"note":""}}}},{"id":"s_6","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Gholvad","code":"","target":12,"done":{"st_survey":12,"st_fitting":12,"st_networking":12,"st_wiring":12,"st_termination":12,"st_validation":12,"st_calibration":12,"st_alert_test":12},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":18,"total":18,"note":""},"it_tr":{"done":18,"total":18,"note":""},"it_signal":{"done":14,"total":14,"note":""},"it_shunt":{"done":7,"total":7,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":18,"total":18,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":18,"total":18,"note":""},"it_tr":{"done":18,"total":18,"note":""},"it_signal":{"done":14,"total":14,"note":""},"it_shunt":{"done":7,"total":7,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":18,"total":18,"note":""}}}},{"id":"s_7","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Saphale","code":"","target":16,"done":{"st_survey":16,"st_fitting":16,"st_networking":16,"st_wiring":16,"st_termination":16,"st_validation":16,"st_calibration":16,"st_alert_test":16},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":20,"total":20,"note":""},"it_tr":{"done":20,"total":20,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":20,"total":20,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":20,"total":20,"note":""},"it_tr":{"done":20,"total":20,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":20,"total":20,"note":""}}}},{"id":"s_8","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Umargaon","code":"","target":18,"done":{"st_survey":18,"st_fitting":18,"st_networking":18,"st_wiring":18,"st_termination":18,"st_validation":18,"st_calibration":18,"st_alert_test":18},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":22,"total":22,"note":""},"it_tr":{"done":22,"total":22,"note":""},"it_signal":{"done":18,"total":18,"note":""},"it_shunt":{"done":9,"total":9,"note":""},"it_point":{"done":24,"total":24,"note":""},"it_tpr":{"done":22,"total":22,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":22,"total":22,"note":""},"it_tr":{"done":22,"total":22,"note":""},"it_signal":{"done":18,"total":18,"note":""},"it_shunt":{"done":9,"total":9,"note":""},"it_point":{"done":24,"total":24,"note":""},"it_tpr":{"done":22,"total":22,"note":""}}}},{"id":"s_9","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Udhna","code":"","target":30,"done":{"st_survey":30,"st_fitting":30,"st_networking":30,"st_wiring":30,"st_termination":30,"st_validation":30,"st_calibration":30,"st_alert_test":30},"items":{"st_termination":{"it_indoor":{"done":4,"total":4,"note":""},"it_tf":{"done":40,"total":40,"note":""},"it_tr":{"done":40,"total":40,"note":""},"it_signal":{"done":30,"total":30,"note":""},"it_shunt":{"done":15,"total":15,"note":""},"it_point":{"done":44,"total":44,"note":""},"it_tpr":{"done":40,"total":40,"note":""}},"st_validation":{"it_indoor":{"done":4,"total":4,"note":""},"it_tf":{"done":40,"total":40,"note":""},"it_tr":{"done":40,"total":40,"note":""},"it_signal":{"done":30,"total":30,"note":""},"it_shunt":{"done":15,"total":15,"note":""},"it_point":{"done":44,"total":44,"note":""},"it_tpr":{"done":40,"total":40,"note":""}}}},{"id":"s_10","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Niyol","code":"","target":12,"done":{"st_survey":12,"st_fitting":12,"st_networking":12,"st_wiring":12,"st_termination":12,"st_validation":12,"st_calibration":12,"st_alert_test":12},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":16,"total":16,"note":""},"it_tr":{"done":16,"total":16,"note":""},"it_signal":{"done":12,"total":12,"note":""},"it_shunt":{"done":6,"total":6,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":16,"total":16,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":16,"total":16,"note":""},"it_tr":{"done":16,"total":16,"note":""},"it_signal":{"done":12,"total":12,"note":""},"it_shunt":{"done":6,"total":6,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":16,"total":16,"note":""}}}},{"id":"s_11","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Bhestan","code":"","target":18,"done":{"st_survey":18,"st_fitting":18,"st_networking":18,"st_wiring":18,"st_termination":18,"st_validation":18,"st_calibration":18,"st_alert_test":18},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":24,"total":24,"note":""},"it_tr":{"done":24,"total":24,"note":""},"it_signal":{"done":18,"total":18,"note":""},"it_shunt":{"done":9,"total":9,"note":""},"it_point":{"done":24,"total":24,"note":""},"it_tpr":{"done":24,"total":24,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":24,"total":24,"note":""},"it_tr":{"done":24,"total":24,"note":""},"it_signal":{"done":18,"total":18,"note":""},"it_shunt":{"done":9,"total":9,"note":""},"it_point":{"done":24,"total":24,"note":""},"it_tpr":{"done":24,"total":24,"note":""}}}},{"id":"s_12","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Maroli","code":"","target":16,"done":{"st_survey":16,"st_fitting":16,"st_networking":16,"st_wiring":16,"st_termination":16,"st_validation":16,"st_calibration":16,"st_alert_test":16},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":20,"total":20,"note":""},"it_tr":{"done":20,"total":20,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":20,"total":20,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":20,"total":20,"note":""},"it_tr":{"done":20,"total":20,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":20,"total":20,"note":""}}}},{"id":"s_13","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Vedchha","code":"","target":12,"done":{"st_survey":12,"st_fitting":12,"st_networking":12,"st_wiring":12,"st_termination":12,"st_validation":12,"st_calibration":12,"st_alert_test":12},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":18,"total":18,"note":""},"it_tr":{"done":18,"total":18,"note":""},"it_signal":{"done":14,"total":14,"note":""},"it_shunt":{"done":7,"total":7,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":18,"total":18,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":18,"total":18,"note":""},"it_tr":{"done":18,"total":18,"note":""},"it_signal":{"done":14,"total":14,"note":""},"it_shunt":{"done":7,"total":7,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":18,"total":18,"note":""}}}},{"id":"s_14","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Chalthan","code":"","target":14,"done":{"st_survey":14,"st_fitting":14,"st_networking":14,"st_wiring":14,"st_termination":14,"st_validation":14,"st_calibration":14,"st_alert_test":14},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":20,"total":20,"note":""},"it_tr":{"done":20,"total":20,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":20,"total":20,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":20,"total":20,"note":""},"it_tr":{"done":20,"total":20,"note":""},"it_signal":{"done":16,"total":16,"note":""},"it_shunt":{"done":8,"total":8,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":20,"total":20,"note":""}}}},{"id":"s_15","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Dungri","code":"","target":12,"done":{"st_survey":12,"st_fitting":12,"st_networking":12,"st_wiring":12,"st_termination":12,"st_validation":12,"st_calibration":12,"st_alert_test":12},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":16,"total":16,"note":""},"it_tr":{"done":16,"total":16,"note":""},"it_signal":{"done":12,"total":12,"note":""},"it_shunt":{"done":6,"total":6,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":16,"total":16,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":16,"total":16,"note":""},"it_tr":{"done":16,"total":16,"note":""},"it_signal":{"done":12,"total":12,"note":""},"it_shunt":{"done":6,"total":6,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":16,"total":16,"note":""}}}},{"id":"s_16","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Gangadhara","code":"","target":15,"done":{"st_survey":15,"st_fitting":15,"st_networking":15,"st_wiring":15,"st_termination":15,"st_validation":15,"st_calibration":15,"st_alert_test":15},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":18,"total":18,"note":""},"it_tr":{"done":18,"total":18,"note":""},"it_signal":{"done":14,"total":14,"note":""},"it_shunt":{"done":7,"total":7,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":18,"total":18,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":18,"total":18,"note":""},"it_tr":{"done":18,"total":18,"note":""},"it_signal":{"done":14,"total":14,"note":""},"it_shunt":{"done":7,"total":7,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":18,"total":18,"note":""}}}},{"id":"s_17","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Timbarva","code":"","target":12,"done":{"st_survey":12,"st_fitting":12,"st_networking":12,"st_wiring":12,"st_termination":12,"st_validation":12,"st_calibration":12,"st_alert_test":12},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":16,"total":16,"note":""},"it_tr":{"done":16,"total":16,"note":""},"it_signal":{"done":12,"total":12,"note":""},"it_shunt":{"done":6,"total":6,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":16,"total":16,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":16,"total":16,"note":""},"it_tr":{"done":16,"total":16,"note":""},"it_signal":{"done":12,"total":12,"note":""},"it_shunt":{"done":6,"total":6,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":16,"total":16,"note":""}}}},{"id":"s_18","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Lakkad Kot","code":"","target":13,"done":{"st_survey":13,"st_fitting":13,"st_networking":13,"st_wiring":13,"st_termination":13,"st_validation":0,"st_calibration":6,"st_alert_test":13},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":16,"total":16,"note":""},"it_tr":{"done":16,"total":16,"note":""},"it_signal":{"done":12,"total":12,"note":""},"it_shunt":{"done":6,"total":6,"note":""},"it_point":{"done":16,"total":16,"note":""},"it_tpr":{"done":16,"total":16,"note":""}},"st_validation":{"it_indoor":{"done":0,"total":2,"note":""},"it_tf":{"done":0,"total":16,"note":""},"it_tr":{"done":0,"total":16,"note":""},"it_signal":{"done":0,"total":12,"note":""},"it_shunt":{"done":0,"total":6,"note":""},"it_point":{"done":0,"total":16,"note":""},"it_tpr":{"done":0,"total":16,"note":""}}}},{"id":"s_19","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Bhortek","code":"","target":16,"done":{"st_survey":16,"st_fitting":16,"st_networking":12,"st_wiring":10,"st_termination":3,"st_validation":0,"st_calibration":0,"st_alert_test":0},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":12,"total":18,"note":""},"it_tr":{"done":12,"total":18,"note":""},"it_signal":{"done":9,"total":14,"note":""},"it_shunt":{"done":6,"total":7,"note":""},"it_point":{"done":20,"total":20,"note":""},"it_tpr":{"done":17,"total":18,"note":"1 TPR missing"}},"st_validation":{"it_indoor":{"done":0,"total":2,"note":""},"it_tf":{"done":0,"total":18,"note":""},"it_tr":{"done":0,"total":18,"note":""},"it_signal":{"done":0,"total":14,"note":""},"it_shunt":{"done":0,"total":7,"note":""},"it_point":{"done":0,"total":20,"note":""},"it_tpr":{"done":0,"total":18,"note":""}}}},{"id":"s_20","projectId":"p_1","zone":"WR","division":"Mumbai Central","station":"Padse","code":"","target":12,"done":{"st_survey":6,"st_fitting":0,"st_networking":0,"st_wiring":0,"st_termination":0,"st_validation":0,"st_calibration":0,"st_alert_test":0},"items":{"st_termination":{"it_indoor":{"done":0,"total":2,"note":""},"it_tf":{"done":0,"total":16,"note":""},"it_tr":{"done":0,"total":16,"note":""},"it_signal":{"done":0,"total":12,"note":""},"it_shunt":{"done":0,"total":6,"note":""},"it_point":{"done":0,"total":16,"note":""},"it_tpr":{"done":0,"total":16,"note":""}},"st_validation":{"it_indoor":{"done":0,"total":2,"note":""},"it_tf":{"done":0,"total":16,"note":""},"it_tr":{"done":0,"total":16,"note":""},"it_signal":{"done":0,"total":12,"note":""},"it_shunt":{"done":0,"total":6,"note":""},"it_point":{"done":0,"total":16,"note":""},"it_tpr":{"done":0,"total":16,"note":""}}}},{"id":"s_21","projectId":"p_2","zone":"NWR","division":"Jaipur","station":"SAKHUN","code":"SKN","target":26,"done":{"st_survey":26,"st_fitting":26,"st_networking":26,"st_wiring":26,"st_termination":26,"st_validation":26,"st_calibration":26,"st_alert_test":26},"items":{"st_termination":{"it_indoor":{"done":3,"total":3,"note":""},"it_tf":{"done":30,"total":30,"note":""},"it_tr":{"done":30,"total":30,"note":""},"it_signal":{"done":24,"total":24,"note":""},"it_shunt":{"done":12,"total":12,"note":""},"it_point":{"done":32,"total":32,"note":""},"it_tpr":{"done":30,"total":30,"note":""}},"st_validation":{"it_indoor":{"done":3,"total":3,"note":""},"it_tf":{"done":30,"total":30,"note":""},"it_tr":{"done":30,"total":30,"note":""},"it_signal":{"done":24,"total":24,"note":""},"it_shunt":{"done":12,"total":12,"note":""},"it_point":{"done":32,"total":32,"note":""},"it_tpr":{"done":30,"total":30,"note":""}}}},{"id":"s_22","projectId":"p_2","zone":"NWR","division":"Jaipur","station":"GAHLOTA","code":"GLTA","target":22,"done":{"st_survey":22,"st_fitting":22,"st_networking":22,"st_wiring":22,"st_termination":22,"st_validation":22,"st_calibration":22,"st_alert_test":22},"items":{"st_termination":{"it_indoor":{"done":3,"total":3,"note":""},"it_tf":{"done":28,"total":28,"note":""},"it_tr":{"done":28,"total":28,"note":""},"it_signal":{"done":22,"total":22,"note":""},"it_shunt":{"done":11,"total":11,"note":""},"it_point":{"done":28,"total":28,"note":""},"it_tpr":{"done":28,"total":28,"note":""}},"st_validation":{"it_indoor":{"done":3,"total":3,"note":""},"it_tf":{"done":28,"total":28,"note":""},"it_tr":{"done":28,"total":28,"note":""},"it_signal":{"done":22,"total":22,"note":""},"it_shunt":{"done":11,"total":11,"note":""},"it_point":{"done":28,"total":28,"note":""},"it_tpr":{"done":28,"total":28,"note":""}}}},{"id":"s_23","projectId":"p_3","zone":"ECR","division":"Danapur","station":"Patliputra","code":"PPTA","target":30,"done":{"st_survey":30,"st_fitting":30,"st_networking":30,"st_wiring":30,"st_termination":30,"st_validation":30,"st_calibration":30,"st_alert_test":30},"items":{"st_termination":{"it_indoor":{"done":4,"total":4,"note":""},"it_tf":{"done":36,"total":36,"note":""},"it_tr":{"done":36,"total":36,"note":""},"it_signal":{"done":28,"total":28,"note":""},"it_shunt":{"done":14,"total":14,"note":""},"it_point":{"done":40,"total":40,"note":""},"it_tpr":{"done":36,"total":36,"note":""}},"st_validation":{"it_indoor":{"done":4,"total":4,"note":""},"it_tf":{"done":36,"total":36,"note":""},"it_tr":{"done":36,"total":36,"note":""},"it_signal":{"done":28,"total":28,"note":""},"it_shunt":{"done":14,"total":14,"note":""},"it_point":{"done":40,"total":40,"note":""},"it_tpr":{"done":36,"total":36,"note":""}}}},{"id":"s_24","projectId":"p_4","zone":"WCR","division":"Kota","station":"ARNETHA","code":"ARE","target":20,"done":{"st_survey":20,"st_fitting":20,"st_networking":20,"st_wiring":20,"st_termination":20,"st_validation":20,"st_calibration":20,"st_alert_test":20},"items":{"st_termination":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":24,"total":24,"note":""},"it_tr":{"done":24,"total":24,"note":""},"it_signal":{"done":18,"total":18,"note":""},"it_shunt":{"done":9,"total":9,"note":""},"it_point":{"done":24,"total":24,"note":""},"it_tpr":{"done":24,"total":24,"note":""}},"st_validation":{"it_indoor":{"done":2,"total":2,"note":""},"it_tf":{"done":24,"total":24,"note":""},"it_tr":{"done":24,"total":24,"note":""},"it_signal":{"done":18,"total":18,"note":""},"it_shunt":{"done":9,"total":9,"note":""},"it_point":{"done":24,"total":24,"note":""},"it_tpr":{"done":24,"total":24,"note":""}}}},{"id":"s_25","projectId":"p_5","zone":"SECR","division":"Raipur","station":"G Cabin","code":"GCBC","target":27,"done":{"st_survey":27,"st_fitting":27,"st_networking":27,"st_wiring":27,"st_termination":27,"st_validation":27,"st_calibration":27,"st_alert_test":27},"items":{"st_termination":{"it_indoor":{"done":4,"total":4,"note":""},"it_tf":{"done":32,"total":32,"note":""},"it_tr":{"done":32,"total":32,"note":""},"it_signal":{"done":24,"total":24,"note":""},"it_shunt":{"done":12,"total":12,"note":""},"it_point":{"done":36,"total":36,"note":""},"it_tpr":{"done":32,"total":32,"note":""}},"st_validation":{"it_indoor":{"done":4,"total":4,"note":""},"it_tf":{"done":32,"total":32,"note":""},"it_tr":{"done":32,"total":32,"note":""},"it_signal":{"done":24,"total":24,"note":""},"it_shunt":{"done":12,"total":12,"note":""},"it_point":{"done":36,"total":36,"note":""},"it_tpr":{"done":32,"total":32,"note":""}}}},{"id":"s_26","projectId":"p_3","zone":"ECR","division":"Dhanbad","station":"Dhanbad","code":"DHN","target":23,"done":{"st_survey":23,"st_fitting":1,"st_networking":0,"st_wiring":0,"st_termination":0,"st_validation":0,"st_calibration":0,"st_alert_test":0},"items":{"st_termination":{"it_indoor":{"done":0,"total":2,"note":""},"it_tf":{"done":0,"total":10,"note":""},"it_tr":{"done":0,"total":10,"note":""},"it_signal":{"done":0,"total":7,"note":""},"it_shunt":{"done":0,"total":3,"note":""},"it_point":{"done":0,"total":16,"note":""},"it_tpr":{"done":0,"total":10,"note":""}},"st_validation":{"it_indoor":{"done":0,"total":2,"note":""},"it_tf":{"done":0,"total":10,"note":""},"it_tr":{"done":0,"total":10,"note":""},"it_signal":{"done":0,"total":7,"note":""},"it_shunt":{"done":0,"total":3,"note":""},"it_point":{"done":0,"total":16,"note":""},"it_tpr":{"done":0,"total":10,"note":""}}}}],"itemsV":1};
+const STORE_KEY = 'rdpms-project-progress-v2';
+const VIEW_KEY = 'rdpms-project-progress-view';
+const IR_ZONES = ['CR','ER','ECR','ECoR','NR','NCR','NER','NFR','NWR','SR','SCR','SER','SECR','SWR','WR','WCR','SCoR','Metro Kolkata'];
+
+let DB = null;
+const state = { projectId: '', zone: '', division: '', stationId: '', sort: { key: 'station', dir: 1 } };
+
+const $ = (id) => document.getElementById(id);
+const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const fmt = (n) => Number(n || 0).toLocaleString('en-IN');
+const pctf = (a, b) => (b ? Math.round(a / b * 100) : 0) + '%';
+const uid = (p) => p + '_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const toast = (msg) => { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800); };
+const fmtDate = (d) => { if (!d) return ''; const x = new Date(d + 'T00:00:00'); return isNaN(x) ? d : x.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); };
+const byName = (a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' });
+
+function normalize(db) {
+  db = db && typeof db === 'object' ? db : {};
+  db.stages = Array.isArray(db.stages) ? db.stages.filter((s) => s && s.id && s.name) : [];
+  db.projects = Array.isArray(db.projects) ? db.projects.filter((p) => p && p.id && p.name) : [];
+  db.stations = Array.isArray(db.stations) ? db.stations.filter((s) => s && s.id && s.projectId) : [];
+  for (const st of db.stages) st.items = Array.isArray(st.items) ? st.items.filter((i) => i && i.id && i.name) : [];
+  for (const s of db.stations) { s.target = Math.max(0, +s.target || 0); s.done = s.done && typeof s.done === 'object' ? s.done : {}; s.items = s.items && typeof s.items === 'object' ? s.items : {}; }
+  return db;
+}
+async function loadDB() {
+  if (window.RDPMS_API && window.RDPMS_API.load) { try { return normalize(await window.RDPMS_API.load()); } catch (e) { console.error(e); } }
+  try { const raw = localStorage.getItem(STORE_KEY); if (raw) return normalize(JSON.parse(raw)); } catch (e) {}
+  return normalize(clone(SAMPLE));
+}
+// One-time update: move older saved data to the 8-stage order
+// Survey, Fitting, Networking, Wiring, Termination, Validation, Calibration, Alert test.
+const STAGE_ORDER = [['st_survey','Survey'],['st_fitting','Fitting'],['st_networking','Networking'],['st_wiring','Wiring'],['st_termination','Termination'],['st_validation','Validation'],['st_calibration','Calibration'],['st_alert_test','Alert test']];
+function migrateStages(db) {
+  if (db.stageOrderV >= 3) return false;
+  db.stageOrderV = 3;
+  const byId = new Map(db.stages.map((s) => [s.id, s]));
+  const known = new Set(STAGE_ORDER.map(([id]) => id));
+  const hadNet = byId.has('st_networking') || db.stages.some((s) => s.name.trim().toLowerCase() === 'networking');
+  const extras = db.stages.filter((s) => !known.has(s.id) && s.name.trim().toLowerCase() !== 'networking');
+  const netExisting = db.stages.find((s) => s.name.trim().toLowerCase() === 'networking');
+  db.stages = [...STAGE_ORDER.map(([id, name]) => id === 'st_networking' && netExisting ? netExisting : (byId.get(id) || { id, name })), ...extras];
+  if (!hadNet) {
+    const later = ['st_wiring','st_termination','st_validation','st_calibration','st_alert_test'];
+    for (const s of db.stations) s.done.st_networking = Math.min(s.target, Math.max(0, ...later.map((k) => +s.done[k] || 0)));
+  }
+  return true;
+}
+// One-time update: give Termination and Validation their item list
+const DEFAULT_ITEMS = ['Indoor', 'TF', 'TR', 'Signal', 'Shunt', 'Point', 'TPR'];
+function migrateItems(db) {
+  if (db.itemsV >= 1) return false;
+  db.itemsV = 1;
+  for (const st of db.stages) {
+    const n = st.name.trim().toLowerCase();
+    if ((n === 'termination' || n === 'validation') && !(st.items && st.items.length)) st.items = DEFAULT_ITEMS.map((x) => ({ id: 'it_' + x.toLowerCase(), name: x }));
+  }
+  return true;
+}
+let saveTimer = null;
+function save(msg) {
+  DB.updatedAt = new Date().toISOString();
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(DB)); } catch (e) {}
+  if (window.RDPMS_API && window.RDPMS_API.save) {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => window.RDPMS_API.save(clone(DB)).catch((e) => { console.error(e); toast('Server save failed'); }), 400);
+  }
+  $('savedState').textContent = 'Saved in this browser · ' + new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  if (msg) toast(msg);
+}
+function saveView() { try { localStorage.setItem(VIEW_KEY, JSON.stringify({ projectId: state.projectId, zone: state.zone, division: state.division, stationId: state.stationId })); } catch (e) {} }
+
+// ---------- helpers ----------
+const project = (id) => DB.projects.find((p) => p.id === id);
+const station = (id) => DB.stations.find((s) => s.id === id);
+const doneOf = (s, stageId) => Math.min(+s.done[stageId] || 0, s.target);
+const cellState = (d, t) => (t > 0 && d >= t ? 'ok' : d > 0 ? 'warn' : 'zero');
+const itemsOf = (st) => (Array.isArray(st.items) ? st.items : []);
+function itemVal(s, stId, itId) { const v = ((s.items || {})[stId] || {})[itId] || {}; return { done: Math.max(0, +v.done || 0), total: Math.max(0, +v.total || 0), note: v.note || '' }; }
+function setItemVal(s, stId, itId, v) { s.items = s.items || {}; s.items[stId] = s.items[stId] || {}; s.items[stId][itId] = v; }
+function itemList(s, st, compact) {
+  const its = itemsOf(st); if (!its.length) return null;
+  const box = h('div', 'items');
+  for (const it of its) {
+    const v = itemVal(s, st.id, it.id);
+    if (compact && !v.total && !v.done && !v.note) continue;
+    const line = h('div', 'it ' + (v.total ? cellState(v.done, v.total) : 'na'));
+    line.append(h('span', 'in', it.name), h('span', 'iv', v.total ? fmt(v.done) + '/' + fmt(v.total) : '—'));
+    line.title = it.name + ': ' + (v.total ? v.done + ' of ' + v.total : 'no total set') + (v.note ? ' — ' + v.note : '');
+    box.append(line);
+    if (v.note) { const n = h('div', 'it-note', v.note); n.title = it.name + ': ' + v.note; box.append(n); }
+  }
+  return box.childNodes.length ? box : null;
+}
+function info(s) {
+  const t = s.target, S = DB.stages;
+  const stepsDone = S.filter((st) => t > 0 && doneOf(s, st.id) >= t).length;
+  const cur = S.find((st) => doneOf(s, st.id) < t);
+  const sumDone = S.reduce((a, st) => a + doneOf(s, st.id), 0);
+  return { stepsDone, cur: cur ? cur.name : null, complete: !cur && t > 0 && S.length > 0, started: sumDone > 0, sumDone, sumTotal: t * S.length };
+}
+function bar(pct) { const b = h('div', 'bar'); const i = h('i'); i.style.width = Math.max(0, Math.min(100, pct)) + '%'; if (pct >= 100) i.className = 'full'; b.append(i); return b; }
+function squares(d, t, n = 10) { const box = h('div', 'sq'); const on = t ? (d >= t ? n : Math.max(d > 0 ? 1 : 0, Math.floor(d / t * n))) : 0; for (let i = 0; i < n; i++) box.append(h('i', i < on ? 'on' : null)); return box; }
+function fillDatalists() {
+  const zones = new Set([...IR_ZONES, ...DB.projects.map((p) => p.zone), ...DB.stations.map((s) => s.zone)].filter(Boolean));
+  $('zoneList').replaceChildren(...[...zones].sort(byName).map((z) => new Option(z)));
+  const divs = new Set([...DB.projects.map((p) => p.division), ...DB.stations.map((s) => s.division)].filter(Boolean));
+  $('divList').replaceChildren(...[...divs].sort(byName).map((d) => new Option(d)));
+}
+
+// ---------- filters (cascading) ----------
+function inProject(s) { return !state.projectId || s.projectId === state.projectId; }
+function inZone(s) { return !state.zone || s.zone === state.zone; }
+function inDivision(s) { return !state.division || s.division === state.division; }
+function filtered() { return DB.stations.filter((s) => inProject(s) && inZone(s) && inDivision(s) && (!state.stationId || s.id === state.stationId)); }
+function renderFilters() {
+  if (state.projectId && !project(state.projectId)) state.projectId = '';
+  const fp = $('fProject');
+  fp.replaceChildren(new Option('All projects (' + DB.projects.length + ')', ''), ...[...DB.projects].sort((a, b) => byName(a.name, b.name)).map((p) => {
+    const n = DB.stations.filter((s) => s.projectId === p.id).length; return new Option(p.name + ' (' + n + ')', p.id);
+  }));
+  fp.value = state.projectId;
+  const pool1 = DB.stations.filter(inProject);
+  const zones = [...new Set(pool1.map((s) => s.zone).filter(Boolean))].sort(byName);
+  if (state.zone && !zones.includes(state.zone)) state.zone = '';
+  $('fZone').replaceChildren(new Option('All zones', ''), ...zones.map((z) => new Option(z + ' (' + pool1.filter((s) => s.zone === z).length + ')', z)));
+  $('fZone').value = state.zone;
+  const pool2 = pool1.filter(inZone);
+  const divs = [...new Set(pool2.map((s) => s.division).filter(Boolean))].sort(byName);
+  if (state.division && !divs.includes(state.division)) state.division = '';
+  $('fDivision').replaceChildren(new Option('All divisions', ''), ...divs.map((d) => new Option(d + ' (' + pool2.filter((s) => s.division === d).length + ')', d)));
+  $('fDivision').value = state.division;
+  const pool3 = pool2.filter(inDivision).sort((a, b) => byName(a.station, b.station));
+  if (state.stationId && !pool3.some((s) => s.id === state.stationId)) state.stationId = '';
+  $('fStation').replaceChildren(new Option('All stations (' + pool3.length + ')', ''), ...pool3.map((s) => new Option(s.station + (s.code ? ' · ' + s.code : ''), s.id)));
+  $('fStation').value = state.stationId;
+}
+
+// ---------- strip: selection detail ----------
+function statBox(label, v, small) { const b = h('div', 'stat'); b.append(h('div', 'l', label)); const vv = h('div', 'v', v); if (small) vv.append(h('small', null, small)); b.append(vv); return b; }
+function renderStrip() {
+  const el = $('strip'); el.replaceChildren();
+  const rows = DB.stations.filter((s) => inProject(s) && inZone(s) && inDivision(s));
+  const p = project(state.projectId);
+  const head = h('div', 'strip-h'); const left = h('div');
+  const scope = [state.zone && 'Zone ' + state.zone, state.division && state.division + ' division'].filter(Boolean).join(' · ');
+  const title = h('h2', 'strip-t', p ? p.name : 'All projects'); if (scope) title.append(h('small', null, scope));
+  left.append(title);
+  const chips = h('div', 'chips');
+  const chip = (k, v, cls) => { if (!v) return; const c = h('span', 'chip ' + (cls || '')); c.append(h('span', 'k', k), ' ' + v); chips.append(c); };
+  if (p) {
+    chip('Zone', p.zone || [...new Set(rows.map((r) => r.zone).filter(Boolean))].join(', '));
+    chip('Division', p.division || [...new Set(rows.map((r) => r.division).filter(Boolean))].join(', '));
+    chip('WO', p.workOrder); chip('Client', p.client);
+    chip('Start', fmtDate(p.startDate)); chip('Target', fmtDate(p.targetDate));
+    if (p.targetDate) {
+      const days = Math.round((new Date(p.targetDate + 'T00:00:00') - new Date(new Date().toDateString())) / 864e5);
+      const all = rows.length && rows.every((r) => info(r).complete);
+      if (!all) chips.append(h('span', 'chip ' + (days < 0 ? 'warn' : ''), days < 0 ? Math.abs(days) + ' days overdue' : days + ' days left'));
+    }
+    if (p.notes) chips.append(h('span', 'chip k', p.notes));
+  } else {
+    chip('Zones', [...new Set(rows.map((r) => r.zone).filter(Boolean))].join(', '));
+    chip('Divisions', String(new Set(rows.map((r) => r.division).filter(Boolean)).size));
+  }
+  left.append(chips); head.append(left);
+  if (p) { const eb = h('button', 'btn', 'Edit project'); eb.type = 'button'; eb.addEventListener('click', () => openProject(p)); head.append(eb); }
+  el.append(head);
+  const complete = rows.filter((r) => info(r).complete).length;
+  const started = rows.filter((r) => info(r).started && !info(r).complete).length;
+  const target = rows.reduce((a, r) => a + r.target, 0);
+  const sumDone = rows.reduce((a, r) => a + info(r).sumDone, 0), sumTotal = rows.reduce((a, r) => a + info(r).sumTotal, 0);
+  const stats = h('div', 'stats');
+  stats.append(statBox('Stations', fmt(rows.length)), statBox('Complete', fmt(complete), ' / ' + fmt(rows.length) + (started ? ' · ' + started + ' in progress' : '')),
+    statBox('Target clusters', fmt(target)), statBox('Overall progress', pctf(sumDone, sumTotal)));
+  el.append(stats);
+  if (!p) {
+    const cards = h('div', 'cards');
+    const projs = [...DB.projects].sort((a, b) => byName(a.name, b.name)).map((pp) => ({ pp, rs: rows.filter((r) => r.projectId === pp.id) })).filter((x) => x.rs.length || (!state.zone && !state.division));
+    for (const { pp, rs } of projs) {
+      const d = rs.reduce((a, r) => a + info(r).sumDone, 0), t = rs.reduce((a, r) => a + info(r).sumTotal, 0);
+      const c = h('button', 'pcard'); c.type = 'button';
+      c.append(h('div', 'n', pp.name), h('div', 'm', rs.filter((r) => info(r).complete).length + '/' + rs.length + ' stations complete · ' + pctf(d, t)), bar(t ? d / t * 100 : 0));
+      c.addEventListener('click', () => { state.projectId = pp.id; state.stationId = ''; renderAll(); });
+      cards.append(c);
+    }
+    if (projs.length) el.append(cards);
+  }
+}
+
+// ---------- station detail ----------
+function renderDetail() {
+  const el = $('detail'); const s = station(state.stationId);
+  el.hidden = !s; if (!s) return; el.replaceChildren();
+  const p = project(s.projectId), I = info(s), t = s.target;
+  const head = h('div', 'strip-h'); const left = h('div');
+  const tt = h('h2', 'strip-t', s.station); if (s.code) tt.append(h('small', null, s.code)); left.append(tt);
+  const chips = h('div', 'chips');
+  for (const [k, v] of [['Project', p && p.name], ['Zone', s.zone], ['Division', s.division], ['Target', fmt(t) + ' clusters']]) if (v) { const c = h('span', 'chip'); c.append(h('span', 'k', k), ' ' + v); chips.append(c); }
+  chips.append(h('span', 'chip ' + (I.complete ? 'ok' : 'warn'), I.complete ? 'All stages complete' : 'At: ' + (I.cur || '—') + ' · ' + I.stepsDone + '/' + DB.stages.length + ' stages'));
+  left.append(chips); head.append(left);
+  const btns = h('div', 'group');
+  const eb = h('button', 'btn', 'Edit station'); eb.type = 'button'; eb.addEventListener('click', () => openStation(s));
+  const cb = h('button', 'btn', 'Show all stations'); cb.type = 'button'; cb.addEventListener('click', () => { state.stationId = ''; renderAll(); });
+  btns.append(eb, cb); head.append(btns); el.append(head);
+  const firstOpen = DB.stages.find((st) => doneOf(s, st.id) < t);
+  const tiles = h('div', 'tiles');
+  DB.stages.forEach((st, i) => {
+    const d = doneOf(s, st.id), cs = cellState(d, t), now = firstOpen && firstOpen.id === st.id;
+    const tile = h('div', 'tile' + (cs === 'ok' ? ' ok' : now ? ' now' : ''));
+    const sp = h('div', 'stepper');
+    const mi = h('button', 'btn icon', '−'); mi.type = 'button'; mi.setAttribute('aria-label', 'Decrease ' + st.name);
+    const pl = h('button', 'btn icon', '+'); pl.type = 'button'; pl.setAttribute('aria-label', 'Increase ' + st.name);
+    const inp = h('input'); inp.type = 'number'; inp.min = 0; inp.max = t; inp.step = 1; inp.value = d; inp.setAttribute('aria-label', st.name + ' clusters done');
+    const setV = (v) => setDone(s, st.id, v);
+    mi.addEventListener('click', () => setV(d - 1)); pl.addEventListener('click', () => setV(d + 1)); inp.addEventListener('change', () => setV(inp.value));
+    sp.append(mi, inp, h('span', 'of', '/ ' + fmt(t)), pl);
+    tile.append(h('div', 't', String(i + 1).padStart(2, '0') + ' · ' + st.name), sp, bar(t ? d / t * 100 : 0), h('div', 'r', cs === 'ok' ? 'Complete' : fmt(Math.max(0, t - d)) + ' remaining'));
+    if (itemsOf(st).length) {
+      const il = itemList(s, st, false); if (il) tile.append(il);
+      const eb = h('button', 'btn', 'Edit items'); eb.type = 'button'; eb.style.alignSelf = 'flex-start'; eb.addEventListener('click', () => openCell(s, st)); tile.append(eb);
+    }
+    tiles.append(tile);
+  });
+  el.append(tiles);
+}
+function setDone(s, stageId, v) { s.done[stageId] = Math.max(0, Math.min(s.target, Math.round(+v || 0))); save(); renderAll(); }
+
+// ---------- matrix ----------
+function renderMatrix() {
+  const tbl = $('mx'); tbl.replaceChildren();
+  let rows = filtered();
+  const S = DB.stages;
+  const p = project(state.projectId);
+  $('mxTitle').textContent = (state.stationId ? 'Station' : 'Stations') + ' · ' + (p ? p.name : 'all projects') + ' (' + rows.length + ')';
+  // header
+  const thead = h('thead'), hr = h('tr');
+  const mk = (key, label, extra, cls) => {
+    const th = h('th', cls || null); const lb = h('span', 'lb', label); th.append(lb); if (extra) extra.forEach((e) => th.append(e));
+    th.setAttribute('aria-sort', state.sort.key === key ? (state.sort.dir > 0 ? 'ascending' : 'descending') : 'none');
+    th.addEventListener('click', () => { if (state.sort.key === key) state.sort.dir *= -1; else state.sort = { key, dir: key === 'station' ? 1 : -1 }; renderMatrix(); });
+    return th;
+  };
+  hr.append(mk('station', 'Station', null, 'first'));
+  for (const st of S) {
+    const d = rows.reduce((a, r) => a + doneOf(r, st.id), 0), t = rows.reduce((a, r) => a + r.target, 0);
+    hr.append(mk('stage:' + st.id, st.name, [h('span', 'tot', fmt(d) + '/' + fmt(t)), h('span', 'pc', pctf(d, t) + ' · ' + rows.filter((r) => r.target > 0 && doneOf(r, st.id) >= r.target).length + '/' + rows.length + ' stn')]));
+  }
+  hr.append(mk('overall', 'Overall'));
+  thead.append(hr); tbl.append(thead);
+  const tbody = h('tbody'); tbl.append(tbody);
+  if (!DB.projects.length) { const tr = h('tr'); const td = h('td', 'empty', 'No projects yet. Click "+ New project" to start.'); td.colSpan = S.length + 2; tr.append(td); tbody.append(tr); return; }
+  if (!rows.length) { const tr = h('tr'); const td = h('td', 'empty', 'No stations here yet. Click "+ Add station".'); td.colSpan = S.length + 2; tr.append(td); tbody.append(tr); return; }
+  const { key, dir } = state.sort;
+  const val = (r) => {
+    if (key === 'station') return r.station;
+    if (key === 'overall') { const I = info(r); return I.sumTotal ? I.sumDone / I.sumTotal : 0; }
+    if (key.startsWith('stage:')) return r.target ? doneOf(r, key.slice(6)) / r.target : 0;
+    return 0;
+  };
+  rows.sort((a, b) => { const x = val(a), y = val(b); return (typeof x === 'string' ? byName(x, y) : x - y) * dir || byName(a.station, b.station); });
+  const groups = state.projectId ? [[state.projectId, rows]] : [...DB.projects].sort((a, b) => byName(a.name, b.name)).map((pp) => [pp.id, rows.filter((r) => r.projectId === pp.id)]).filter(([, rs]) => rs.length);
+  for (const [pid, rs] of groups) {
+    if (!state.projectId) {
+      const pp = project(pid); const gr = h('tr', 'grp'); const td = h('td'); td.colSpan = S.length + 2;
+      const d = rs.reduce((a, r) => a + info(r).sumDone, 0), t = rs.reduce((a, r) => a + info(r).sumTotal, 0);
+      td.append(pp.name, h('span', 'm', rs.length + ' station' + (rs.length === 1 ? '' : 's') + ' · ' + rs.filter((r) => info(r).complete).length + ' complete · ' + pctf(d, t)));
+      gr.append(td); tbody.append(gr);
+    }
+    for (const r of rs) {
+      const I = info(r), tr = h('tr', r.id === state.stationId ? 'sel' : null);
+      const first = h('td', 'first');
+      const sn = h('div', 'sn', r.station); if (r.code) sn.append(h('span', 'code', r.code));
+      first.append(sn, h('div', 'ss', [r.zone, r.division].filter(Boolean).join(' · ') + ' · ' + fmt(r.target) + ' clusters'),
+        h('div', 'ss', I.stepsDone + '/' + S.length + ' stages complete'),
+        h('span', 'badge ' + (I.complete ? 'ok' : I.started ? 'warn' : 'zero'), I.complete ? 'Complete' : I.started ? 'At: ' + I.cur : 'Not started'));
+      first.title = 'Open ' + r.station;
+      first.addEventListener('click', () => { state.projectId = r.projectId; state.stationId = r.id; renderAll(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+      tr.append(first);
+      for (const st of S) {
+        const d = doneOf(r, st.id), t = r.target, cs = cellState(d, t);
+        const td = h('td', 'c ' + cs); td.title = r.station + ' · ' + st.name + ': ' + d + ' of ' + t + ' clusters';
+        const v = h('div', 'v', fmt(d)); v.append(h('span', 'of', '/' + fmt(t)));
+        td.append(v, squares(d, t));
+        if (itemsOf(st).length) { td.classList.add('has-items'); const il = itemList(r, st, false); if (il) td.append(il); }
+        td.tabIndex = 0;
+        const open = () => openCell(r, st);
+        td.addEventListener('click', open); td.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+        tr.append(td);
+      }
+      const ov = h('td', 'ov'); ov.append(h('div', 'v', pctf(I.sumDone, I.sumTotal)), h('div', 's', fmt(I.sumDone) + '/' + fmt(I.sumTotal)), bar(I.sumTotal ? I.sumDone / I.sumTotal * 100 : 0));
+      tr.append(ov); tbody.append(tr);
+    }
+  }
+}
+
+function renderAll() { fillDatalists(); renderFilters(); renderStrip(); renderDetail(); renderMatrix(); saveView(); }
+
+// ---------- filters events ----------
+$('fProject').addEventListener('change', (e) => { state.projectId = e.target.value; state.zone = ''; state.division = ''; state.stationId = ''; renderAll(); });
+$('fZone').addEventListener('change', (e) => { state.zone = e.target.value; state.division = ''; state.stationId = ''; renderAll(); });
+$('fDivision').addEventListener('change', (e) => { state.division = e.target.value; state.stationId = ''; renderAll(); });
+$('fStation').addEventListener('change', (e) => { state.stationId = e.target.value; renderAll(); });
+
+// ---------- dialogs ----------
+document.querySelectorAll('dialog [data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
+
+// quick cell edit
+let cellCtx = null;
+function openCell(s, st) {
+  cellCtx = { s, st, defs: clone(itemsOf(st)), vals: {}, removed: [] };
+  for (const it of cellCtx.defs) cellCtx.vals[it.id] = itemVal(s, st.id, it.id);
+  $('cNewItem').value = '';
+  renderCellItems();
+  $('cellTitle').textContent = s.station + ' · ' + st.name;
+  $('cellSub').textContent = 'Clusters done out of ' + fmt(s.target);
+  $('cVal').max = s.target; $('cVal').value = doneOf(s, st.id); $('cOf').textContent = '/ ' + fmt(s.target);
+  $('cellDlg').showModal(); $('cVal').select();
+}
+const cAdj = (n) => { $('cVal').value = Math.max(0, Math.min(cellCtx.s.target, (Math.round(+$('cVal').value) || 0) + n)); };
+$('cMinus').addEventListener('click', () => cAdj(-1));
+$('cPlus').addEventListener('click', () => cAdj(1));
+$('cZero').addEventListener('click', () => { $('cVal').value = 0; });
+$('cFull').addEventListener('click', () => { $('cVal').value = cellCtx.s.target; });
+function renderCellItems() {
+  const { defs, vals } = cellCtx; const box = $('cItems');
+  if (!defs.length) { box.replaceChildren(h('div', 'hint', 'No items in this stage yet.')); return; }
+  const hd = h('div', 'irow irow-h'); hd.append(h('span', null, 'Item'), h('span', null, 'Done'), h('span'), h('span', null, 'Total'), h('span', null, 'Remark'), h('span'));
+  box.replaceChildren(hd, ...defs.map((it) => {
+    const v = vals[it.id] || (vals[it.id] = { done: 0, total: 0, note: '' });
+    const row = h('div', 'irow');
+    const dn = h('input'); dn.type = 'number'; dn.min = 0; dn.step = 1; dn.value = v.done; dn.setAttribute('aria-label', it.name + ' done');
+    const tt = h('input'); tt.type = 'number'; tt.min = 0; tt.step = 1; tt.value = v.total; tt.setAttribute('aria-label', it.name + ' total');
+    const nt = h('input'); nt.type = 'text'; nt.value = v.note; nt.placeholder = 'e.g. 1 TPR missing'; nt.setAttribute('aria-label', it.name + ' remark');
+    dn.addEventListener('input', () => { v.done = Math.max(0, Math.round(+dn.value || 0)); });
+    tt.addEventListener('input', () => { v.total = Math.max(0, Math.round(+tt.value || 0)); });
+    nt.addEventListener('input', () => { v.note = nt.value; });
+    const del = h('button', 'btn icon danger', '✕'); del.type = 'button'; del.title = 'Remove ' + it.name + ' from this stage';
+    del.addEventListener('click', () => {
+      if (!confirm('Remove item "' + it.name + '" from ' + cellCtx.st.name + ' for every station?')) return;
+      cellCtx.defs = defs.filter((x) => x !== it); cellCtx.removed.push(it.id); delete vals[it.id]; renderCellItems();
+    });
+    row.append(h('span', 'nm', it.name), dn, h('span', 'sl', '/'), tt, nt, del);
+    return row;
+  }));
+}
+function addCellItem() {
+  const name = $('cNewItem').value.trim(); if (!name) { $('cNewItem').focus(); return; }
+  if (cellCtx.defs.some((x) => x.name.toLowerCase() === name.toLowerCase())) { toast(name + ' is already in this stage'); return; }
+  const it = { id: uid('it'), name }; cellCtx.defs.push(it); cellCtx.vals[it.id] = { done: 0, total: 0, note: '' };
+  $('cNewItem').value = ''; renderCellItems();
+}
+$('cAddItem').addEventListener('click', addCellItem);
+$('cNewItem').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCellItem(); } });
+$('cellForm').addEventListener('submit', (e) => {
+  e.preventDefault(); const { s, st, defs, vals, removed } = cellCtx;
+  st.items = defs;
+  for (const x of DB.stations) for (const id of removed) if (x.items && x.items[st.id]) delete x.items[st.id][id];
+  for (const it of defs) { const v = vals[it.id]; setItemVal(s, st.id, it.id, { done: v.total ? Math.min(v.done, v.total) : v.done, total: v.total, note: (v.note || '').trim() }); }
+  $('cellDlg').close(); setDone(s, st.id, $('cVal').value); toast(s.station + ' · ' + st.name + ' updated');
+});
+
+// project
+let editingProject = null;
+function openProject(p) {
+  editingProject = p || null;
+  $('projectDlgTitle').textContent = p ? 'Edit project' : 'New project';
+  $('pfName').value = p ? p.name : ''; $('pfZone').value = p ? p.zone || '' : state.zone; $('pfDivision').value = p ? p.division || '' : state.division;
+  $('pfWo').value = p ? p.workOrder || '' : ''; $('pfClient').value = p ? p.client || '' : '';
+  $('pfStart').value = p ? p.startDate || '' : ''; $('pfTarget').value = p ? p.targetDate || '' : ''; $('pfNotes').value = p ? p.notes || '' : '';
+  $('pfDelete').hidden = !p; $('pfErr').textContent = '';
+  $('projectDlg').showModal(); $('pfName').focus();
+}
+$('projectForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = $('pfName').value.trim();
+  if (!name) { $('pfErr').textContent = 'Enter a project name.'; return; }
+  if (DB.projects.some((p) => p.name.toLowerCase() === name.toLowerCase() && p !== editingProject)) { $('pfErr').textContent = 'A project with this name already exists.'; return; }
+  const p = editingProject || { id: uid('p') };
+  Object.assign(p, { name, zone: $('pfZone').value.trim(), division: $('pfDivision').value.trim(), workOrder: $('pfWo').value.trim(), client: $('pfClient').value.trim(), startDate: $('pfStart').value, targetDate: $('pfTarget').value, notes: $('pfNotes').value.trim() });
+  if (!editingProject) { DB.projects.push(p); state.zone = ''; state.division = ''; state.stationId = ''; }
+  state.projectId = p.id; save(editingProject ? 'Project updated' : 'Project added');
+  $('projectDlg').close(); renderAll();
+});
+$('pfDelete').addEventListener('click', () => {
+  const p = editingProject; if (!p) return;
+  const n = DB.stations.filter((s) => s.projectId === p.id).length;
+  if (!confirm('Delete project "' + p.name + '"' + (n ? ' and its ' + n + ' station' + (n === 1 ? '' : 's') : '') + '? This cannot be undone.')) return;
+  DB.stations = DB.stations.filter((s) => s.projectId !== p.id); DB.projects = DB.projects.filter((x) => x !== p);
+  state.projectId = ''; state.stationId = ''; save('Project deleted'); $('projectDlg').close(); renderAll();
+});
+
+// station
+let editingStation = null;
+function openStation(s) {
+  if (!DB.projects.length) { openProject(); return; }
+  editingStation = s || null;
+  $('stationDlgTitle').textContent = s ? 'Edit station' : 'Add station';
+  const projs = [...DB.projects].sort((a, b) => byName(a.name, b.name));
+  $('sfProject').replaceChildren(...projs.map((p) => new Option(p.name, p.id)));
+  const pid = s ? s.projectId : (state.projectId || projs[0].id); $('sfProject').value = pid;
+  const p = project(pid) || {};
+  const firstOf = (v) => (v || '').split(',')[0].trim();
+  $('sfZone').value = s ? s.zone || '' : state.zone || p.zone || '';
+  $('sfDivision').value = s ? s.division || '' : state.division || firstOf(p.division);
+  $('sfStation').value = s ? s.station : ''; $('sfCode').value = s ? s.code || '' : ''; $('sfTarget').value = s ? s.target : '';
+  $('sfStages').replaceChildren(...DB.stages.map((st) => {
+    const f = h('div', 'field'); const id = 'sfst_' + st.id; const l = h('label', null, st.name); l.htmlFor = id;
+    const i = h('input'); i.type = 'number'; i.min = 0; i.step = 1; i.id = id; i.dataset.stage = st.id; i.value = s ? (+s.done[st.id] || 0) : 0; if (s) i.max = s.target;
+    f.append(l, i); return f;
+  }));
+  if (!DB.stages.length) $('sfStages').replaceChildren(h('div', 'hint', 'No stages yet — add them with "Edit stages".'));
+  $('sfDelete').hidden = !s; $('sfErr').textContent = '';
+  $('stationDlg').showModal(); (s ? $('sfTarget') : $('sfStation')).focus();
+}
+$('sfProject').addEventListener('change', () => {
+  if (editingStation) return; const p = project($('sfProject').value) || {};
+  if (!$('sfZone').value) $('sfZone').value = p.zone || '';
+  if (!$('sfDivision').value) $('sfDivision').value = (p.division || '').split(',')[0].trim();
+});
+$('sfTarget').addEventListener('input', () => { $('sfStages').querySelectorAll('input').forEach((i) => { i.max = $('sfTarget').value; }); });
+$('stationForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = $('sfStation').value.trim(), pid = $('sfProject').value, target = Math.round(+$('sfTarget').value);
+  if (!pid) { $('sfErr').textContent = 'Choose a project.'; return; }
+  if (!name) { $('sfErr').textContent = 'Enter a station name.'; return; }
+  if ($('sfTarget').value === '' || !(target >= 0)) { $('sfErr').textContent = 'Enter target clusters (0 or more).'; return; }
+  if (DB.stations.some((s) => s.projectId === pid && s.station.toLowerCase() === name.toLowerCase() && s !== editingStation)) { $('sfErr').textContent = 'This station is already in that project.'; return; }
+  const done = {}; let over = false;
+  $('sfStages').querySelectorAll('input[data-stage]').forEach((i) => { const v = Math.max(0, Math.round(+i.value || 0)); if (v > target) over = true; done[i.dataset.stage] = Math.min(v, target); });
+  if (over && !confirm('Some stage numbers are above the target and will be capped at ' + target + '. Continue?')) return;
+  const s = editingStation || { id: uid('s'), done: {} };
+  Object.assign(s, { projectId: pid, zone: $('sfZone').value.trim(), division: $('sfDivision').value.trim(), station: name, code: $('sfCode').value.trim().toUpperCase(), target });
+  s.done = { ...s.done, ...done };
+  if (!editingStation) DB.stations.push(s);
+  state.projectId = pid; state.zone = ''; state.division = ''; state.stationId = s.id;
+  save(editingStation ? 'Station updated' : 'Station added'); $('stationDlg').close(); renderAll();
+});
+$('sfDelete').addEventListener('click', () => {
+  const s = editingStation; if (!s) return;
+  if (!confirm('Delete station "' + s.station + '"? This cannot be undone.')) return;
+  DB.stations = DB.stations.filter((x) => x !== s); state.stationId = '';
+  save('Station deleted'); $('stationDlg').close(); renderAll();
+});
+
+// stages
+let stageDraft = [];
+function renderStageDraft() {
+  $('stList').replaceChildren(...stageDraft.map((st, i) => {
+    const row = h('div', 'stage-row');
+    const inp = h('input'); inp.type = 'text'; inp.value = st.name; inp.setAttribute('aria-label', 'Stage ' + (i + 1) + ' name'); inp.addEventListener('input', () => { st.name = inp.value; });
+    const itx = h('input', 'itx'); itx.type = 'text'; itx.value = st.itemsText || ''; itx.placeholder = 'Items (optional, comma separated) e.g. TF, TR, Signal, Shunt, Point, TPR';
+    itx.setAttribute('aria-label', 'Stage ' + (i + 1) + ' items'); itx.addEventListener('input', () => { st.itemsText = itx.value; });
+    const names = h('div', 'names'); names.append(inp, itx);
+    const up = h('button', 'btn icon', '▲'); up.type = 'button'; up.disabled = i === 0; up.setAttribute('aria-label', 'Move up');
+    const dn = h('button', 'btn icon', '▼'); dn.type = 'button'; dn.disabled = i === stageDraft.length - 1; dn.setAttribute('aria-label', 'Move down');
+    const del = h('button', 'btn icon danger', '✕'); del.type = 'button'; del.setAttribute('aria-label', 'Remove stage');
+    up.addEventListener('click', () => { [stageDraft[i - 1], stageDraft[i]] = [stageDraft[i], stageDraft[i - 1]]; renderStageDraft(); });
+    dn.addEventListener('click', () => { [stageDraft[i + 1], stageDraft[i]] = [stageDraft[i], stageDraft[i + 1]]; renderStageDraft(); });
+    del.addEventListener('click', () => { stageDraft.splice(i, 1); renderStageDraft(); });
+    row.append(h('div', 'ix', String(i + 1)), names, up, dn, del); return row;
+  }));
+}
+$('stagesBtn').addEventListener('click', () => { stageDraft = clone(DB.stages).map((s) => ({ ...s, itemsText: itemsOf(s).map((i) => i.name).join(', ') })); $('stErr').textContent = ''; renderStageDraft(); $('stagesDlg').showModal(); });
+$('stAdd').addEventListener('click', () => { stageDraft.push({ id: uid('st'), name: '', items: [], itemsText: '' }); renderStageDraft(); const ins = $('stList').querySelectorAll('input:not(.itx)'); ins[ins.length - 1].focus(); });
+$('stagesForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  stageDraft.forEach((s) => { s.name = s.name.trim(); });
+  if (stageDraft.some((s) => !s.name)) { $('stErr').textContent = 'Every stage needs a name (or remove the empty one).'; return; }
+  const names = stageDraft.map((s) => s.name.toLowerCase());
+  if (new Set(names).size !== names.length) { $('stErr').textContent = 'Two stages have the same name.'; return; }
+  const keep = new Set(stageDraft.map((s) => s.id)); const removed = DB.stages.filter((s) => !keep.has(s.id));
+  if (removed.length && !confirm('Remove stage' + (removed.length > 1 ? 's ' : ' ') + removed.map((s) => '"' + s.name + '"').join(', ') + ' and their numbers from every station?')) return;
+  // items per stage: keep ids by name so numbers survive renames of other items
+  const lostItems = [];
+  const next = stageDraft.map((s) => {
+    const old = itemsOf(DB.stages.find((x) => x.id === s.id) || {});
+    const seen = new Set(); const items = [];
+    for (const raw of (s.itemsText || '').split(',')) {
+      const nm = raw.trim(); if (!nm || seen.has(nm.toLowerCase())) continue; seen.add(nm.toLowerCase());
+      const ex = old.find((o) => o.name.toLowerCase() === nm.toLowerCase());
+      items.push(ex ? { id: ex.id, name: nm } : { id: uid('it'), name: nm });
+    }
+    for (const o of old) if (!items.some((x) => x.id === o.id)) lostItems.push([s, o]);
+    return { id: s.id, name: s.name, items };
+  });
+  if (lostItems.length && !confirm('Remove item' + (lostItems.length > 1 ? 's ' : ' ') + lostItems.map(([s, o]) => s.name + ' › ' + o.name).join(', ') + ' and their numbers from every station?')) return;
+  for (const s of DB.stations) {
+    for (const r of removed) { delete s.done[r.id]; if (s.items) delete s.items[r.id]; }
+    for (const [st, o] of lostItems) if (s.items && s.items[st.id]) delete s.items[st.id][o.id];
+  }
+  DB.stages = next; save('Stages updated'); $('stagesDlg').close(); renderAll();
+});
+
+// ---------- toolbar ----------
+$('newProjectBtn').addEventListener('click', () => openProject());
+$('newStationBtn').addEventListener('click', () => openStation());
+$('stagesBtn').title = 'Rename, reorder, add or remove stages';
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t;
+  const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.querySelectorAll('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.themeSet === cur ? 'true' : 'false'));
+}
+document.querySelectorAll('[data-theme-set]').forEach((b) => b.addEventListener('click', () => { applyTheme(b.dataset.themeSet); try { localStorage.setItem('rdpms-theme', b.dataset.themeSet); } catch (e) {} }));
+$('resetBtn').addEventListener('click', () => {
+  if (!confirm('Replace all your projects, stations and stages with the sample data? Make a Backup JSON first if you want to keep them.')) return;
+  DB = normalize(clone(SAMPLE)); Object.assign(state, { projectId: '', zone: '', division: '', stationId: '' }); save('Sample data restored'); renderAll();
+});
+function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+const stamp = () => new Date().toISOString().slice(0, 10);
+const keyOf = (name) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+$('backupBtn').addEventListener('click', () => download('rdpms_progress_backup_' + stamp() + '.json', JSON.stringify(DB, null, 2), 'application/json'));
+$('exportCsvBtn').addEventListener('click', () => {
+  const icol = (st, it, k) => keyOf(st.name) + '__' + it.name.trim().replace(/[^A-Za-z0-9]+/g, '_') + '_' + k;
+  const itemCols = DB.stages.flatMap((st) => itemsOf(st).flatMap((it) => ['done', 'total', 'note'].map((k) => [icol(st, it, k), st, it, k])));
+  const head = ['project', 'zone', 'division', 'station', 'code', 'target_clusters', ...DB.stages.map((s) => keyOf(s.name)), ...itemCols.map((c) => c[0])];
+  const esc = (v) => { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const lines = [head.join(',')];
+  for (const p of [...DB.projects].sort((a, b) => byName(a.name, b.name)))
+    for (const s of DB.stations.filter((x) => x.projectId === p.id)) lines.push([p.name, s.zone, s.division, s.station, s.code, s.target, ...DB.stages.map((st) => +s.done[st.id] || 0), ...itemCols.map(([, st, it, k]) => itemVal(s, st.id, it.id)[k])].map(esc).join(','));
+  download('rdpms_progress_' + stamp() + '.csv', lines.join('\n'), 'text/csv');
+});
+function parseCSV(text) {
+  const lines = []; let row = [], cell = '', q = false; text = text.replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; }
+    else if (c === '"') q = true; else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); lines.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); lines.push(row); }
+  const head = (lines.shift() || []).map((x) => x.trim());
+  return { head, rows: lines.filter((l) => l.some((x) => x.trim())).map((l) => head.map((_, i) => (l[i] || '').trim())) };
+}
+function importCSV(text) {
+  const { head, rows } = parseCSV(text); const keys = head.map(keyOf); const ix = (k) => keys.indexOf(k);
+  const tIx = ix('target_clusters') >= 0 ? ix('target_clusters') : ix('target');
+  if (ix('project') < 0 || ix('station') < 0 || tIx < 0) throw new Error('CSV needs columns: project, station, target_clusters (then one column per stage).');
+  const fixed = new Set(['project', 'zone', 'division', 'station', 'code', 'target_clusters', 'target']);
+  const stageCols = head.map((name, i) => ({ name, i, key: keys[i] })).filter((c) => c.key && !fixed.has(c.key) && !c.name.includes('__'));
+  const itemColsIn = head.map((name, i) => ({ name, i })).filter((c) => c.name.includes('__')).map((c) => {
+    const [sp, rest] = [c.name.slice(0, c.name.indexOf('__')), c.name.slice(c.name.indexOf('__') + 2)];
+    const m = rest.match(/^(.*)_(done|total|note)$/i); if (!m) return null;
+    return { i: c.i, stageKey: keyOf(sp), itemName: m[1].replace(/_/g, ' ').trim(), k: m[2].toLowerCase() };
+  }).filter(Boolean);
+  const stages = stageCols.map((c) => { const ex = DB.stages.find((s) => keyOf(s.name) === c.key); const nice = c.name.replace(/_/g, ' ').replace(/\s+/g, ' ').trim(); return ex ? { id: ex.id, name: ex.name } : { id: uid('st'), name: nice.charAt(0).toUpperCase() + nice.slice(1) }; });
+  const projects = [], pmap = new Map(), stations = [];
+  for (const r of rows) {
+    const pname = r[ix('project')]; if (!pname) continue;
+    let p = pmap.get(pname.toLowerCase());
+    if (!p) { const old = DB.projects.find((x) => x.name.toLowerCase() === pname.toLowerCase()); p = old ? { ...old } : { id: uid('p'), name: pname, zone: ix('zone') >= 0 ? r[ix('zone')] : '', division: '' }; pmap.set(pname.toLowerCase(), p); projects.push(p); }
+    const target = Math.max(0, Math.round(+r[tIx] || 0)); const done = {};
+    stageCols.forEach((c, k) => { done[stages[k].id] = Math.min(target, Math.max(0, Math.round(+r[c.i] || 0))); });
+    const sItems = {};
+    for (const c of itemColsIn) {
+      const st = stages.find((x) => keyOf(x.name) === c.stageKey); if (!st) continue;
+      st.items = st.items || [];
+      let it = st.items.find((x) => x.name.toLowerCase() === c.itemName.toLowerCase());
+      if (!it) { const ex = itemsOf(DB.stages.find((x) => x.id === st.id) || {}).find((x) => x.name.toLowerCase() === c.itemName.toLowerCase()); it = ex ? { ...ex } : { id: uid('it'), name: c.itemName }; st.items.push(it); }
+      const o = ((sItems[st.id] = sItems[st.id] || {})[it.id] = sItems[st.id][it.id] || { done: 0, total: 0, note: '' });
+      if (c.k === 'note') o.note = r[c.i]; else o[c.k] = Math.max(0, Math.round(+r[c.i] || 0));
+    }
+    stations.push({ id: uid('s'), projectId: p.id, zone: ix('zone') >= 0 ? r[ix('zone')] : '', division: ix('division') >= 0 ? r[ix('division')] : '', station: r[ix('station')], code: ix('code') >= 0 ? r[ix('code')] : '', target, done, items: sItems });
+  }
+  if (!stations.length) throw new Error('No station rows found in the CSV.');
+  return { stageOrderV: 3, itemsV: 1, stages, projects, stations };
+}
+$('importBtn').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const text = await f.text(); let next;
+    if (/\.json$/i.test(f.name) || text.trim().startsWith('{')) next = normalize(JSON.parse(text)); else next = normalize(importCSV(text));
+    if (!next.projects.length) throw new Error('No projects found in the file.');
+    if (!confirm('Replace current data with "' + f.name + '"?\n' + next.projects.length + ' project(s), ' + next.stations.length + ' station(s), ' + next.stages.length + ' stage(s).')) return;
+    DB = next; migrateStages(DB); migrateItems(DB); Object.assign(state, { projectId: '', zone: '', division: '', stationId: '' }); save('Imported ' + f.name); renderAll();
+  } catch (err) { alert('Could not import: ' + err.message); }
+});
+
+// ---------- start ----------
+(async () => {
+  try { const t = localStorage.getItem('rdpms-theme'); applyTheme(t || null); } catch (e) { applyTheme(null); }
+  DB = await loadDB();
+  if (migrateStages(DB) | migrateItems(DB)) save();
+  try { const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); if (v) Object.assign(state, { projectId: v.projectId || '', zone: v.zone || '', division: v.division || '', stationId: v.stationId || '' }); } catch (e) {}
+  $('savedState').textContent = DB.updatedAt ? 'Saved in this browser · ' + new Date(DB.updatedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Sample data — your changes save in this browser';
+  renderAll();
+})();
+</script>
+</body>
+</html>

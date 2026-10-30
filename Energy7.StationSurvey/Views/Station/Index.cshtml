@@ -1,0 +1,1058 @@
+@{
+    ViewData["Title"] = "Station Survey";
+}
+
+<!-- ═══ FILTER BAR ═══ -->
+<div class="sbar">
+    <div class="fg">
+        <label>Zone</label>
+        <select id="ddZone" asp-items="ViewBag.Zones" onchange="onZoneChange(this.value)">
+        </select>
+    </div>
+    <div class="fg">
+        <label>Division</label>
+        <select id="ddDivision" asp-items="ViewBag.Divisions" onchange="onDivisionChange(this.value)">
+        </select>
+    </div>
+    <div class="fg">
+        <label>Station</label>
+        <select id="ddStation" asp-items="ViewBag.Sites" onchange="onStationChange(this.value)">
+        </select>
+    </div>
+    <div class="dv"></div>
+    <div class="sbadge"><span class="dot"></span><span id="badgeStatus">Select Station</span></div>
+    <span style="font-size:10px;color:var(--txl);margin-left:6px" id="stationInfo"></span>
+</div>
+
+<!-- ═══ TABS ═══ -->
+<div class="etabs">
+    <div class="etab on" data-tab="overview"><i class="bi bi-grid" style="font-size:13px"></i> Overview</div>
+    <div class="etab" data-tab="assets"><i class="bi bi-cpu" style="font-size:13px"></i> Assets <span class="tc" id="tabAssetCount">—</span></div>
+    <div class="etab" data-tab="location"><i class="bi bi-geo-alt" style="font-size:13px"></i> Location <span class="tc" id="tabLocationCount">—</span></div>
+    <div class="etab" data-tab="yard"><i class="bi bi-diagram-3" style="font-size:13px"></i> Yard Config</div>
+    <div class="etab" data-tab="material"><i class="bi bi-box-seam" style="font-size:13px"></i> Material</div>
+    <div class="etab" data-tab="documents"><i class="bi bi-file-earmark-check" style="font-size:13px"></i> Documents</div>
+</div>
+
+<!-- ═══ TAB CONTENT ═══ -->
+<div class="econt">
+
+    <!-- ── OVERVIEW ── -->
+    <div class="tp on" id="tab-overview">
+        <div class="sgrid">
+            <div class="sc acc">
+                <div class="sl">Total Locations</div>
+                <div class="sv" id="statLocations">—</div>
+                <div class="ss" id="statLocationsSub">Select a station</div>
+            </div>
+            <div class="sc">
+                <div class="sl">Total Clusters</div>
+                <div class="sv" id="statClusters">—</div>
+                <div class="ss" id="statClustersSub">—</div>
+            </div>
+            <div class="sc">
+                <div class="sl">Total Data Points</div>
+                <div class="sv" id="statDataPoints">—</div>
+                <div class="ss" id="statDataPointsSub">—</div>
+            </div>
+            <div class="sc">
+                <div class="sl">Total Assets</div>
+                <div class="sv" id="statAssets">—</div>
+                <div class="ss" id="statAssetsSub">—</div>
+            </div>
+            <div class="sc">
+                <div class="sl">TDC Countdown</div>
+                <div class="sv" style="color:var(--err)">3d</div>
+                <div class="ss">Expires: 28 Mar 2026</div>
+            </div>
+        </div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="ic">
+                    <h6><i class="bi bi-building"></i> Station Information</h6>
+                    <div class="ir"><span class="il">Station Name</span><span class="iv" id="infoName">—</span></div>
+                    <div class="ir"><span class="il">Station Code</span><span class="iv" id="infoCode">—</span></div>
+                    <div class="ir"><span class="il">Zone / Division</span><span class="iv" id="infoZoneDiv">—</span></div>
+                    <div class="ir"><span class="il">FRS Year</span><span class="iv">2026</span></div>
+                    <div class="ir"><span class="il">Start Date</span><span class="iv">15-Nov-2025</span></div>
+                    <div class="ir"><span class="il">Stage</span><span class="iv" style="color:var(--co);font-weight:600">Execution</span></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="ic">
+                    <h6><i class="bi bi-exclamation-triangle"></i> Dependencies</h6>
+                    <div style="margin-bottom:8px">
+                        <div style="font-size:10px;font-weight:700;color:var(--err);text-transform:uppercase;margin-bottom:4px">E7</div>
+                        <div style="font-size:11px;line-height:1.7">A10 — 80 pcs · Antenna — 80 pcs · AI Card pending</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px;font-weight:700;color:var(--warn);text-transform:uppercase;margin-bottom:4px">Railway</div>
+                        <div style="font-size:11px;line-height:1.7">2 Cluster space N/A · 17 Cluster 110V PS issue</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── ASSETS ── -->
+    <div class="tp" id="tab-assets">
+        <div class="alay">
+            <div class="asb">
+                <div class="asb-h">
+                    <h6>Asset Types</h6>
+                    <button class="be7" style="padding:2px 8px;font-size:10px"
+                            data-bs-toggle="offcanvas"
+                            data-bs-target="#addTypeOC"
+                            title="Configure Asset Types">
+                        <i class="bi bi-plus"></i>
+                    </button>
+                </div>
+                <div class="offcanvas offcanvas-end" tabindex="-1" id="addTypeOC" data-bs-backdrop="false" data-bs-scroll="true">
+                    <div class="offcanvas-header" style="border-bottom:1px solid var(--bd)">
+                        <h5 class="offcanvas-title" style="font-size:13px;font-weight:700">
+                            Configure Asset Types
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+                    </div>
+                    <div class="offcanvas-body" style="font-size:12px">
+                        <div id="assetTypeConfigList">
+                            <div style="padding:12px;text-align:center;color:var(--txm)">Loading…</div>
+                        </div>
+                        <div style="position:sticky;bottom:0;padding:10px 0;background:#fff">
+                            <button class="be7 w-100" onclick="saveAssetTypeConfig()">Save</button>
+                        </div>
+                    </div>
+                </div>
+                <ul class="atl" id="atList">
+                    <li style="padding:12px;text-align:center;color:var(--txm);font-size:11px">Select a station</li>
+                </ul>
+            </div>
+            <div class="adp">
+                <div class="adp-h">
+                    <h6 id="adTitle">DC Tracks</h6>
+                    <span style="font-size:10px;color:var(--txm)">35 assets · 8 unverified</span>
+                </div>
+                <div class="aig">
+                    <div class="aic">
+                        <div class="ct" id="assetListTitle">Track Name</div>
+                        <div class="ais">
+                            <div class="adi">
+                                <input type="text" placeholder="Add name" id="newTrackIn">
+                                <button onclick="openAddAssetModal()" title="Add Asset"><i class="bi bi-plus"></i></button>
+                            </div>
+                            <div id="trackList">
+                                <div class="fot-group" data-fot="1T">
+                                    <div class="fot-parent sel" draggable="true" data-track="1T" onclick="selTrack(this,'1T')" ondragover="fotDragOver(event,this)" ondragleave="fotDragLeave(this)" ondrop="fotDrop(event,this)">
+                                        <span class="fot-icon open">&#9654;</span><span>1T</span><span class="fot-badge">FOT 3</span>
+                                    </div>
+                                    <div class="fot-children open">
+                                        <div class="fot-child" onclick="selTrack(this,'2T')"><span class="fc-line"></span>2T<span class="fc-tag">adj.</span><span class="fc-rm" onclick="event.stopPropagation();unfot(this)">&times;</span></div>
+                                        <div class="fot-child" onclick="selTrack(this,'3T')"><span class="fc-line"></span>3T<span class="fc-tag">adj.</span><span class="fc-rm" onclick="event.stopPropagation();unfot(this)">&times;</span></div>
+                                    </div>
+                                </div>
+                                <div class="air" draggable="true" data-track="118T" onclick="selTrack(this,'118 T')" ondragover="fotDragOver(event,this)" ondragleave="fotDragLeave(this)" ondrop="fotDrop(event,this)">118 T</div>
+                                <div class="air" draggable="true" data-track="02AT" onclick="selTrack(this,'02 AT')" ondragover="fotDragOver(event,this)" ondragleave="fotDragLeave(this)" ondrop="fotDrop(event,this)">02 AT</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="atp">
+                        <div class="ath">
+                            <span class="an" id="selAN">—</span>
+                            <span class="pl on" id="selAssetTypeTag">—</span>
+                            <span class="pl" id="selAssetSubTag">Type</span>
+                        </div>
+                        <div class="mode-bar">
+                            <span class="mode-lbl on" id="maL">Section-level LOC</span>
+                            <label class="mtog"><input type="checkbox" id="modeTog" onchange="switchMode(this.checked)"><span class="mtog-sl"></span></label>
+                            <span class="mode-lbl" id="mbL">Individual LOC</span>
+                        </div>
+                        <div id="modeA">
+                            <div class="ats">
+                                <div class="ats-t">
+                                    TF End
+                                    <select class="loc-s loc-dd" style="margin-left:4px" onchange="this.nextElementSibling.textContent=this.value"><option>LOC-1</option><option>LOC-2</option><option>LOC-3</option><option>CRR</option></select>
+                                    <span class="lb" style="background:var(--info)">LOC-1</span>
+                                    <label class="stog" style="margin-left:auto"><input type="checkbox" checked onchange="togG(this,'tfA')"><span class="stog-sl"></span></label>
+                                </div>
+                                <div class="ar"><input type="checkbox" checked data-g="tfA"><span class="aname">CHG I/P V</span><input class="rt-inp" placeholder="Row"><input class="rt-inp" placeholder="Trm"><button class="sv-btn" onclick="svA(this)">Save</button></div>
+                                <div class="ar"><input type="checkbox" checked data-g="tfA"><span class="aname">CHG O/P V</span><input class="rt-inp" placeholder="Row"><input class="rt-inp" placeholder="Trm"><button class="sv-btn" onclick="svA(this)">Save</button></div>
+                                <div class="ar"><input type="checkbox" checked data-g="tfA"><span class="aname">TF V</span><input class="rt-inp" placeholder="Row"><input class="rt-inp" placeholder="Trm"><button class="sv-btn" onclick="svA(this)">Save</button></div>
+                            </div>
+                            <div class="ats">
+                                <div class="ats-t">
+                                    TR End
+                                    <select class="loc-s loc-dd" style="margin-left:4px" onchange="this.nextElementSibling.textContent=this.value"><option>LOC-1</option><option selected>LOC-2</option><option>LOC-3</option><option>CRR</option></select>
+                                    <span class="lb" style="background:var(--info)">LOC-2</span>
+                                    <label class="stog" style="margin-left:auto"><input type="checkbox" checked onchange="togG(this,'trA')"><span class="stog-sl"></span></label>
+                                </div>
+                                <div class="ar"><input type="checkbox" checked data-g="trA"><span class="aname">TR V</span><input class="rt-inp" placeholder="Row"><input class="rt-inp" placeholder="Trm"><button class="sv-btn" onclick="svA(this)">Save</button></div>
+                                <div class="ar"><input type="checkbox" checked data-g="trA"><span class="aname">TR mA</span><input class="rt-inp" placeholder="Row"><input class="rt-inp" placeholder="Trm"><button class="sv-btn" onclick="svA(this)">Save</button></div>
+                            </div>
+                        </div>
+                        <div id="modeB" style="display:none">
+                            <div class="ats">
+                                <div class="ats-t">TF End<label class="stog" style="margin-left:auto"><input type="checkbox" checked onchange="togG(this,'tfB')"><span class="stog-sl"></span></label></div>
+                                <div class="ar"><input type="checkbox" checked data-g="tfB"><span class="aname">CHG I/P V</span><input class="rt-inp" placeholder="Row"><input class="rt-inp" placeholder="Trm"><select class="loc-s-sm loc-dd"><option>LOC-1</option><option>LOC-2</option><option>LOC-3</option><option>CRR</option></select><button class="sv-btn" onclick="svA(this)">Save</button></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── LOCATION ── -->
+    <div class="tp" id="tab-location">
+        <div class="loc-top">
+            <div class="cr-box">
+                <h6><i class="bi bi-plus-circle"></i> Create Location</h6>
+                <div class="cr-row">
+                    <input type="text" placeholder="Location name e.g. LOC-65">
+                    <select><option>Outdoor</option><option>Indoor</option></select>
+                    <button class="be7" style="padding:5px 12px">Add</button>
+                </div>
+            </div>
+            <div class="cr-box">
+                <h6><i class="bi bi-diagram-2"></i> Create Cluster</h6>
+                <div class="cr-row">
+                    <input type="text" placeholder="Cluster name e.g. CL-42">
+                    <select><option>Group</option><option>Single</option></select>
+                    <button class="be7" style="padding:5px 12px">Add</button>
+                </div>
+            </div>
+        </div>
+        <div class="loc-layout">
+            <div class="loc-pool">
+                <h6>Unassigned Locations</h6>
+                <div class="loc-card-wrap"><div class="loc-card-inner"><span class="grip">⠿</span><span class="ln">LOC-41</span><span class="ld">Outdoor</span></div></div>
+                <div class="loc-card-wrap"><div class="loc-card-inner"><span class="grip">⠿</span><span class="ln">LOC-42</span><span class="ld">Outdoor</span></div></div>
+            </div>
+            <div class="clust-area">
+                <div class="clust-box">
+                    <div class="clust-head"><span class="cn">CL-1</span><span class="ct group">Group</span></div>
+                    <div class="clust-drop">
+                        <div class="clust-loc-wrap"><div class="clust-loc-inner"><span class="cl-name">LOC-1</span><span class="cl-info">Outdoor</span><span class="cl-role master">Master</span><span class="cl-rm">×</span></div></div>
+                        <div class="clust-loc-wrap"><div class="clust-loc-inner"><span class="cl-name">LOC-2</span><span class="cl-info">Outdoor</span><span class="cl-role slave">Slave</span><span class="cl-rm">×</span></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── YARD CONFIG ── -->
+    <div class="tp" id="tab-yard">
+        <div class="yg">
+            <div class="yi">
+                <div class="yn">Platform 1 Up Line</div>
+                <div class="yc"><input type="checkbox" checked><span>Signal A1</span></div>
+                <div class="yc"><input type="checkbox" checked><span>Track 1T</span></div>
+                <div class="yc"><input type="checkbox"><span>Signal A2</span></div>
+                <div class="yc"><input type="checkbox" checked><span>PM-01</span></div>
+            </div>
+            <div class="yi">
+                <div class="yn">Platform 2 Down Line</div>
+                <div class="yc"><input type="checkbox" checked><span>Signal B1</span></div>
+                <div class="yc"><input type="checkbox" checked><span>Track 2T</span></div>
+                <div class="yc"><input type="checkbox"><span>PM-02</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── MATERIAL ── -->
+    <div class="tp" id="tab-material">
+        <div class="stw" id="survCont">
+            <div class="stw-h">
+                <h6>Material Register</h6>
+                <div style="display:flex;gap:6px">
+                    <button class="bg7" id="fsBtn"><i class="bi bi-fullscreen"></i></button>
+                    <button class="be7"><i class="bi bi-download me-1"></i>Export</button>
+                </div>
+            </div>
+            <div style="overflow-x:auto">
+                <table class="st">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Material</th>
+                            <th>Unit</th>
+                            <th class="gh">Planned</th>
+                            <th class="gh">Consumed</th>
+                            <th class="gh">Remaining</th>
+                            <th>Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="dv">01</td><td>A10 Unit</td><td>Pcs</td><td>80</td><td>45</td><td>35</td><td><div class="mb"><div class="mb-f" style="width:56%"></div></div></td></tr>
+                        <tr><td class="dv">02</td><td>Antenna</td><td>Pcs</td><td>80</td><td>30</td><td>50</td><td><div class="mb"><div class="mb-f w" style="width:37%"></div></div></td></tr>
+                        <tr><td class="dv">03</td><td>AI Card</td><td>Pcs</td><td>35</td><td>0</td><td>35</td><td><div class="mb"><div class="mb-f d" style="width:0%"></div></div></td></tr>
+                        <tr><td class="dv">04</td><td>Cable (50m)</td><td>Rolls</td><td>20</td><td>18</td><td>2</td><td><div class="mb"><div class="mb-f" style="width:90%"></div></div></td></tr>
+                        <tr><td class="dv">05</td><td>Junction Box</td><td>Pcs</td><td>64</td><td>55</td><td>9</td><td><div class="mb"><div class="mb-f" style="width:86%"></div></div></td></tr>
+                    </tbody>
+                    <tfoot>
+                        <tr><th colspan="3">Total</th><th>279</th><th>148</th><th>131</th><th></th></tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── DOCUMENTS ── -->
+    <div class="tp" id="tab-documents">
+        <div class="dl">
+            <div class="di"><div class="dn">01</div><div class="dm">Site Survey Report</div><div class="ds ok">Prepared</div></div>
+            <div class="di"><div class="dn">02</div><div class="dm">Location Layout Drawing</div><div class="ds pn">Required</div></div>
+            <div class="di"><div class="dn">03</div><div class="dm">Asset Master List</div><div class="ds ok">Prepared</div></div>
+            <div class="di"><div class="dn">04</div><div class="dm">Cable Schedule</div><div class="ds wk">In Progress</div></div>
+            <div class="di"><div class="dn">05</div><div class="dm">FTU Configuration Sheet</div><div class="ds pn">Required</div></div>
+            <div class="di"><div class="dn">06</div><div class="dm">Cluster Assignment Sheet</div><div class="ds ok">Prepared</div></div>
+            <div class="di"><div class="dn">07</div><div class="dm">LOC Wiring Diagram</div><div class="ds wk">In Progress</div></div>
+            <div class="di"><div class="dn">08</div><div class="dm">Testing Protocol</div><div class="ds na">N/A</div></div>
+        </div>
+    </div>
+
+</div><!-- /econt -->
+<!-- ══ ADD ASSET MODAL ══════════════════════════════════════════════════════ -->
+<div class="modal fade" id="addAssetModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius:10px;border:none">
+            <div class="modal-header" style="padding:12px 18px;border-bottom:1px solid var(--bd)">
+                <h5 class="modal-title" id="addAssetModalTitle" style="font-size:14px;font-weight:700;margin:0">Add Asset</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:16px 18px">
+                <!-- Top fields: Name / Http Link / Number Of Cell / Is Active -->
+                <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-bottom:14px;align-items:end">
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Name <span style="color:var(--err)">*</span></label>
+                        <input type="text" id="assetModalName" class="form-control form-control-sm" placeholder="Asset name">
+                    </div>
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Http Link</label>
+                        <input type="text" id="assetModalHttp" class="form-control form-control-sm" placeholder="http://...">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;padding-bottom:6px">
+                        <input type="checkbox" id="assetModalActive" checked style="accent-color:var(--co);width:14px;height:14px">
+                        <label for="assetModalActive" style="font-size:12px;margin:0;cursor:pointer">Is Active</label>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+                    <div>
+                        <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Number Of Cell</label>
+                        <input type="number" id="assetModalCells" class="form-control form-control-sm" placeholder="0">
+                    </div>
+                </div>
+
+                <!-- Sub-tabs: Config (active) + disabled others matching old site -->
+                <ul class="nav nav-tabs" style="font-size:12px;margin-bottom:12px;border-bottom:1px solid var(--bd)">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" style="font-size:12px;padding:6px 12px">Config</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link disabled" href="#" style="font-size:12px;padding:6px 12px;color:var(--txm)">Signal Mapping</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link disabled" href="#" style="font-size:12px;padding:6px 12px;color:var(--txm)">Alerts</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link disabled" href="#" style="font-size:12px;padding:6px 12px;color:var(--txm)">FRSAlerts</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link disabled" href="#" style="font-size:12px;padding:6px 12px;color:var(--txm)">Cause Code Activation</a>
+                    </li>
+                </ul>
+
+                <!-- Config tab body: Attributes / Channels / Value / Multiplication -->
+                <div style="max-height:280px;overflow-y:auto">
+                    <table class="table table-sm" style="font-size:12px;margin-bottom:0">
+                        <thead style="position:sticky;top:0;background:#fff;z-index:1">
+                            <tr style="border-bottom:1px solid var(--bd)">
+                                <th style="font-weight:600;color:var(--txm);width:30%">Attributes</th>
+                                <th style="font-weight:600;color:var(--txm);width:30%">Channels</th>
+                                <th style="font-weight:600;color:var(--txm);width:20%">Value</th>
+                                <th style="font-weight:600;color:var(--txm);width:20%">Multiplication</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assetConfigBody">
+                            <tr>
+                                <td colspan="4" style="text-align:center;color:var(--txm);padding:20px">
+                                    <i class="bi bi-arrow-clockwise" style="animation:spin .7s linear infinite"></i> Loading attributes…
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:10px 18px;border-top:1px solid var(--bd)">
+                <button type="button" class="btn btn-sm" style="border:1px solid var(--bd);color:var(--txm);padding:5px 16px" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-sm be7" style="padding:5px 16px" onclick="saveAssetFromModal()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+
+        // ── Zone → Division cascade ───────────────────────────────────────────────────
+        function onZoneChange(zoneId) {
+            $.ajax({
+                url: '@Url.Action("GetDivisionByZoneId", "Station")',
+                data: { zoneId: zoneId },
+                success: function (data) {
+                    var dd = $('#ddDivision');
+                    dd.empty().append('<option value="0">Select Division</option>');
+                    $.each(data, function (i, d) {
+                        dd.append('<option value="' + d.id + '">' + d.name + '</option>');
+                    });
+                    $('#ddStation').empty().append('<option value="0">Select Station</option>');
+                    resetStats();
+                }
+            });
+        }
+
+        // ── Division → Station cascade ────────────────────────────────────────────────
+        function onDivisionChange(divisionId) {
+            $.ajax({
+                url: '@Url.Action("GetSiteByDivisionId", "Station")',
+                data: { divisionId: divisionId },
+                success: function (data) {
+                    var dd = $('#ddStation');
+                    dd.empty().append('<option value="0">Select Station</option>');
+                    $.each(data, function (i, s) {
+                        dd.append('<option value="' + s.id + '">' + s.name + '</option>');
+                    });
+                    resetStats();
+                }
+            });
+        }
+
+        // ── Station change → load CardLine stats ──────────────────────────────────────
+        function onStationChange(siteId) {
+            debugger;
+            var stationName  = $('#ddStation option:selected').text();
+            var zoneName     = $('#ddZone option:selected').text();
+            var divisionName = $('#ddDivision option:selected').text();
+
+            if (!siteId || siteId == 0) { resetStats(); return; }
+
+            // Update info panel immediately
+            $('#infoName').text(stationName);
+            $('#infoZoneDiv').text(zoneName + ' / ' + divisionName);
+            $('#stationInfo').text(zoneName + ' · ' + divisionName + ' · ' + stationName);
+
+            // Show loading state
+            ['statLocations','statClusters','statDataPoints','statAssets'].forEach(function(id) {
+                $('#' + id).html('<i class="bi bi-arrow-clockwise" style="font-size:14px;animation:spin .7s linear infinite"></i>');
+            });
+
+            // Call CardLine API via controller
+            $.ajax({
+                url: '@Url.Action("GetCardLineBySiteId", "Station")',
+                data: { siteId: siteId },
+                success: function (data) {
+                    if (!data || data.error) { resetStats(); return; }
+                    bindStats(data);
+                },
+                error: function () { resetStats(); }
+            });
+             loadAssetTypes(siteId);
+        }
+
+        function bindStats(data) {
+            if (!data || data.error) { resetStats(); return; }
+
+            $('#statLocations').text(data.totalLocations ?? 0);
+            $('#statLocationsSub').text((data.totalLocations ?? 0) + ' unique locations');
+            $('#statClusters').text(data.totalClusters ?? 0);
+            $('#statClustersSub').text((data.totalClusters ?? 0) + ' unique clusters');
+            $('#statDataPoints').text(data.totalDataPoints ?? 0);
+            $('#statDataPointsSub').text('Asset × Attribute combinations');
+            $('#statAssets').text(data.totalAssets ?? 0);
+            $('#statAssetsSub').text(data.assetBreakdown || '—');
+            $('#tabAssetCount').text(data.totalAssets ?? 0);
+            $('#tabLocationCount').text(data.totalLocations ?? 0);
+
+            // Capture CardLine records + per-type counts for drill-down
+            __cardLines = data.records || [];
+            __cardLineTypeCounts = {};
+            if (data.assetTypeCounts && data.assetTypeCounts.length) {
+                data.assetTypeCounts.forEach(function (t) {
+                    __cardLineTypeCounts[t.assetTypeId] = {
+                        count: t.count || 0,
+                        dataPoints: t.dataPoints || 0,
+                        name: t.assetTypeName
+                    };
+                });
+            }
+
+            // Re-render sidebar only if site types are already loaded
+            // (so counts update in-place without changing the type list)
+            if (__siteAssetTypes.length) {
+                renderAssetTypeSidebar();
+            }
+        }
+        function resetStats() {
+            ['statLocations','statClusters','statDataPoints','statAssets'].forEach(function(id) {
+                $('#' + id).text('—');
+            });
+            ['statLocationsSub','statClustersSub','statDataPointsSub','statAssetsSub'].forEach(function(id) {
+                $('#' + id).text('—');
+            });
+            $('#infoName, #infoCode, #infoZoneDiv').text('—');
+            $('#stationInfo').text('');
+            $('#tabLocationCount, #tabAssetCount').text('—');
+            $('#atList').html('<li style="padding:12px;text-align:center;color:var(--txm);font-size:11px">Select a station</li>');
+        }
+
+        // ── Tab switching ─────────────────────────────────────────────────────────────
+        document.querySelectorAll('.etab').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.etab').forEach(function(t) { t.classList.remove('on'); });
+                document.querySelectorAll('.tp').forEach(function(p) { p.classList.remove('on'); });
+                tab.classList.add('on');
+                var panel = document.getElementById('tab-' + tab.dataset.tab);
+                if (panel) panel.classList.add('on');
+            });
+        });
+
+        // ── Asset type list ───────────────────────────────────────────────────────────
+        document.querySelectorAll('.ati').forEach(function(item) {
+            item.addEventListener('click', function() {
+                if (item.id === 'pmToggle') {
+                    var sub = document.getElementById('pmSub');
+                    sub.style.display = sub.style.display === 'none' ? 'block' : 'none';
+                    return;
+                }
+                document.querySelectorAll('.ati').forEach(function(i) { i.classList.remove('on'); });
+                item.classList.add('on');
+                var h = document.getElementById('adTitle');
+                if (h) h.textContent = item.querySelector('span').textContent.trim();
+            });
+        });
+
+        function switchMode(checked) {
+            document.getElementById('modeA').style.display = checked ? 'none' : 'block';
+            document.getElementById('modeB').style.display = checked ? 'block' : 'none';
+            document.getElementById('maL').classList.toggle('on', !checked);
+            document.getElementById('mbL').classList.toggle('on', checked);
+        }
+        function togG(cb, grp) {
+            document.querySelectorAll('[data-g="' + grp + '"]').forEach(function(c) {
+                c.checked = cb.checked;
+                var row = c.closest('.ar');
+                row.querySelectorAll('input:not([type=checkbox]),button,select').forEach(function(el) {
+                    el.disabled = !cb.checked;
+                    el.style.opacity = cb.checked ? '' : '.4';
+                });
+            });
+        }
+        function svA(btn) {
+            var row = btn.closest('.ar');
+            var name = row.querySelector('.aname').textContent;
+            btn.textContent = '✓'; btn.style.background = 'var(--ok)';
+            setTimeout(function() { btn.textContent = 'Save'; btn.style.background = ''; }, 1500);
+        }
+        function selTrack(el, name) {
+            document.querySelectorAll('.air,.fot-parent,.fot-child').forEach(function(x) { x.classList.remove('sel'); });
+            el.classList.add('sel');
+            var selAN = document.getElementById('selAN');
+            if (selAN) selAN.textContent = name;
+        }
+        var fotDrag = null;
+        function fotDragOver(e, el) { e.preventDefault(); el.classList.add('drag-over-fot'); }
+        function fotDragLeave(el)   { el.classList.remove('drag-over-fot'); }
+        function fotDrop(e, target) {
+            e.preventDefault(); e.stopPropagation();
+            target.classList.remove('drag-over-fot');
+            if (!fotDrag || fotDrag === target) return;
+            fotDrag.remove(); fotDrag = null;
+        }
+        document.querySelectorAll('.air').forEach(function(el) {
+            el.addEventListener('dragstart', function(e) { fotDrag = el; el.style.opacity = '.4'; });
+            el.addEventListener('dragend',   function()  { if(fotDrag) fotDrag.style.opacity = ''; fotDrag = null; });
+        });
+        function addTrack() {
+            var inp = document.getElementById('newTrackIn');
+            var name = inp.value.trim(); if (!name) return;
+            var el = document.createElement('div');
+            el.className = 'air'; el.draggable = true; el.dataset.track = name.replace(/\s/g, '');
+            el.textContent = name;
+            el.onclick = function() { selTrack(el, name); };
+            document.getElementById('trackList').appendChild(el);
+            inp.value = '';
+        }
+        document.addEventListener('click', function(e) {
+            var icon = e.target.closest('.fot-icon');
+            if (icon) {
+                icon.classList.toggle('open');
+                var children = icon.closest('.fot-group')?.querySelector('.fot-children');
+                if (children) children.classList.toggle('open');
+                e.stopPropagation();
+            }
+        });
+        document.querySelectorAll('.ds').forEach(function(s) {
+            s.addEventListener('click', function() {
+                var st = ['ok','pn','wk','na'], lb = ['Prepared','Required','In Progress','N/A'];
+                var i = st.indexOf([...this.classList].find(function(c) { return st.includes(c); }));
+                i = (i + 1) % st.length;
+                this.className = 'ds ' + st[i];
+                this.textContent = lb[i];
+            });
+        });
+        var fb = document.getElementById('fsBtn'), sc = document.getElementById('survCont');
+        if (fb && sc) fb.addEventListener('click', function() { sc.classList.toggle('fst'); });
+
+                 // ── State ─────────────────────────────────────────────────────────────────
+        var __masterAssetTypes   = [];
+        var __siteAssetTypes     = [];
+        var __currentSiteId      = 0;
+        var __cardLineTypeCounts = {};
+        var __cardLines          = [];
+        var __savedTypeIdsBySite = {};   // { siteId: [typeId, typeId, ...] } — cleared on refresh
+        var __savedTypeNamesBySite = {};
+
+        // ── Selection helpers (in-memory, per page load) ──────────────────────────
+        function getSavedTypeIds(siteId) {
+            return __savedTypeIdsBySite[siteId] || null;
+        }
+        function saveTypeIds(siteId, ids) {
+            __savedTypeIdsBySite[siteId] = ids;
+        }
+
+        // ── Also clear any legacy cookies from earlier testing ────────────────────
+        (function clearLegacyCookies() {
+            document.cookie.split(';').forEach(function (c) {
+                var name = c.split('=')[0].trim();
+                if (name.indexOf('assetTypes_') === 0) {
+                    document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+                }
+            });
+        })();
+
+        // ── Field helpers (tolerant of casing differences) ────────────────────────
+        function typeId(t)   { return t.id ?? t.assetTypeId ?? 0; }
+        function typeName(t) { return t.name ?? t.assetTypeName ?? 'Unknown'; }
+        function typeCount(t){ return t.assetCount ?? t.count ?? 0; }
+        function typeUnver(t){ return t.unverifiedCount ?? t.unverified ?? 0; }
+
+        // ── Load both datasets, then render sidebar ───────────────────────────────
+                          function loadAssetTypes(siteId) {
+            __currentSiteId = siteId;
+            $('#atList').html('<li style="padding:12px;text-align:center;color:var(--txm);font-size:11px">Loading…</li>');
+
+            // Site-scoped list (primary source for sidebar)
+            var pSite = $.ajax({
+                url: '/Station/GetAllAssetTypeById',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify([siteId])
+            });
+
+            // Master list (used only for the offcanvas checklist)
+            var pMaster = $.ajax({
+                url: '/Station/GetAllAssetType',
+                type: 'GET'
+            });
+
+            $.when(pSite, pMaster).done(function (siteRes, masterRes) {
+                __siteAssetTypes   = (siteRes[0]   && !siteRes[0].error)   ? siteRes[0]   : [];
+                __masterAssetTypes = (masterRes[0] && !masterRes[0].error) ? masterRes[0] : [];
+                renderAssetTypeSidebar();
+            }).fail(function () {
+                $('#atList').html('<li style="padding:12px;text-align:center;color:var(--err);font-size:11px">Failed to load</li>');
+            });
+        }
+
+                        function renderAssetTypeSidebar() {
+            var $list = $('#atList');
+            var saved = getSavedTypeIds(__currentSiteId);
+            var savedNames = (__savedTypeNamesBySite && __savedTypeNamesBySite[__currentSiteId]) || {};
+
+            var toShow;
+            if (saved && saved.length) {
+                // Build list from saved IDs — merge name from savedNames first,
+                // fall back to __siteAssetTypes, fall back to __masterAssetTypes
+                toShow = saved.map(function (id) {
+                    // try site types first
+                    var found = __siteAssetTypes.find(function (t) { return typeId(t) === id; });
+                    if (!found && __masterAssetTypes.length) {
+                        found = __masterAssetTypes.find(function (t) { return typeId(t) === id; });
+                    }
+                    // if still not found, build a minimal object from the saved name
+                    if (!found) {
+                        found = { id: id, name: savedNames[id] || ('Type ' + id), assetCount: 0 };
+                    }
+                    return found;
+                });
+            } else {
+                toShow = __siteAssetTypes;
+            }
+
+            if (!toShow.length) {
+                $list.html('<li style="padding:12px;text-align:center;color:var(--txm);font-size:11px">No asset types for this site</li>');
+                $('#tabAssetCount').text(0);
+                return;
+            }
+
+            var totalAssets = 0;
+            var html = '';
+
+            $.each(toShow, function (i, t) {
+                var id     = typeId(t);
+                var name   = typeName(t);
+                var clInfo = __cardLineTypeCounts[id];
+                var count  = clInfo ? clInfo.count : typeCount(t);
+                var unver  = typeUnver(t);
+
+                totalAssets += count;
+                var isFirst  = (i === 0) ? ' on' : '';
+                var unvBadge = unver > 0 ? '<span class="ae">' + unver + '?</span>' : '';
+
+                html += '<li class="ati' + isFirst + '" data-type-id="' + id + '" data-type-name="' + name + '">'
+                      +     '<span>' + name + '</span>'
+                      +     '<span><span class="ac">' + count + '</span>' + unvBadge + '</span>'
+                      + '</li>';
+            });
+
+            $list.html(html);
+            $('#tabAssetCount').text(totalAssets);
+
+            var first     = toShow[0];
+            var firstId   = typeId(first);
+            var firstInfo = __cardLineTypeCounts[firstId];
+            var firstCount = firstInfo ? firstInfo.count : typeCount(first);
+            $('#adTitle').text(typeName(first));
+            $('.adp-h span:last-child').text(firstCount + ' assets');
+
+            bindAssetTypeClicks();
+            loadAssetsForType(firstId, typeName(first));
+        }
+        // ── Click handler for sidebar items (delegated) ───────────────────────────
+                function bindAssetTypeClicks() {
+            $('#atList').off('click', '.ati').on('click', '.ati', function () {
+                $('#atList .ati').removeClass('on');
+                $(this).addClass('on');
+
+                var tId     = parseInt($(this).data('type-id'), 10);
+                var tName   = $(this).data('type-name');
+                var count   = $(this).find('.ac').text();
+
+                $('#adTitle').text(tName);
+                $('.adp-h span:last-child').text(count + ' assets');
+
+                loadAssetsForType(tId, tName);
+            });
+        }
+
+        // ── Offcanvas: populate checklist when it opens ───────────────────────────
+        $(document).on('show.bs.offcanvas', '#addTypeOC', function () {
+            var $box = $('#assetTypeConfigList');
+            if (!__masterAssetTypes.length) {
+                $box.html('<div style="padding:12px;text-align:center;color:var(--txm)">Select a station first</div>');
+                return;
+            }
+
+            var saved = getSavedTypeIds(__currentSiteId);
+            var checkedSet;
+            if (saved && saved.length) {
+                checkedSet = {};
+                saved.forEach(function (id) { checkedSet[id] = true; });
+            } else {
+                // Default: check all types that have records at this site
+                checkedSet = {};
+                __siteAssetTypes.forEach(function (t) { checkedSet[typeId(t)] = true; });
+            }
+
+            var html = '';
+            __masterAssetTypes.forEach(function (t) {
+                var id      = typeId(t);
+                var name    = typeName(t);
+                var checked = checkedSet[id] ? 'checked' : '';
+                html += '<label class="yc" style="padding:5px 0;display:flex;align-items:center;gap:8px">'
+                      +     '<input type="checkbox" class="at-chk" value="' + id + '" ' + checked + '>'
+                      +     '<span>' + name + '</span>'
+                      + '</label>';
+            });
+            $box.html(html);
+        });
+                        function loadAssetsForType(assetTypeId, assetTypeName) {
+            // Unique assets of this type from CardLine
+            var map = {};
+            __cardLines.forEach(function (r) {
+                if (r.assetTypeId === assetTypeId && r.assetId) {
+                    if (!map[r.assetId]) {
+                        map[r.assetId] = { id: r.assetId, name: r.assetName || ('Asset ' + r.assetId) };
+                    }
+                }
+            });
+
+            var assets = Object.values(map).sort(function (a, b) {
+                return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+            });
+
+            // ── Update middle-panel title ("TRACK NAME" → "SIGNAL NAME" etc.) ─────
+            var upper = (assetTypeName || 'ASSET').toUpperCase();
+            $('#assetListTitle').text(upper + ' NAME');
+
+            // ── Update right-panel tag ("DC Track" → current asset type) ──────────
+            $('#selAssetTypeTag').text(assetTypeName || '—');
+
+            var $list = $('#trackList');
+            if (!assets.length) {
+                $list.html('<div style="padding:12px;text-align:center;color:var(--txm);font-size:11px">No assets</div>');
+                $('#modeA').html('<div style="padding:16px;text-align:center;color:var(--txm);font-size:11px">No assets of this type</div>');
+                $('#modeB').html('');
+                $('#selAN').text('—');
+                return;
+            }
+
+            var html = '';
+            assets.forEach(function (a, i) {
+                var sel = (i === 0) ? ' sel' : '';
+                html += '<div class="air' + sel + '" data-asset-id="' + a.id + '" '
+                      +     'onclick="selectAsset(this, ' + a.id + ')">'
+                      +     (a.name || '') + '</div>';
+            });
+            $list.html(html);
+
+            // Auto-load the first asset's attributes and update its name in the header
+            $('#selAN').text(assets[0].name);
+            loadAttributesForAsset(assets[0].id);
+        }
+                function loadAttributesForAsset(assetId) {
+            var records = __cardLines.filter(function (r) { return r.assetId === assetId; });
+            if (!records.length) {
+                $('#modeA').html('<div style="padding:16px;text-align:center;color:var(--txm);font-size:11px">No attributes</div>');
+                $('#modeB').html('');
+                return;
+            }
+
+            $('#selAN').text(records[0].assetName || '');
+
+            // Group attributes by LocationName (e.g. "TF End", "TR End", or "lc 14")
+            var groups = {};
+            records.forEach(function (r) {
+                var loc = r.locationName || 'Default';
+                if (!groups[loc]) groups[loc] = [];
+                groups[loc].push(r);
+            });
+
+            var html = '';
+            var idx  = 0;
+            Object.keys(groups).forEach(function (loc) {
+                var rows   = groups[loc];
+                var grpKey = 'g' + (idx++);
+
+                html += '<div class="ats">';
+                html +=   '<div class="ats-t">' + loc;
+                html +=     '<label class="stog" style="margin-left:auto">'
+                      +       '<input type="checkbox" checked onchange="togG(this,\'' + grpKey + '\')">'
+                      +       '<span class="stog-sl"></span>'
+                      +     '</label>';
+                html +=   '</div>';
+
+                rows.forEach(function (r) {
+                    var attrName = r.attributeName || '';
+                    var row      = r.rowNumber != null ? r.rowNumber : '';
+                    var trm      = r.terminalNumberPositive != null ? r.terminalNumberPositive : '';
+
+                    html += '<div class="ar" data-cardline-id="' + (r.id || '') + '">'
+                          +   '<input type="checkbox" checked data-g="' + grpKey + '">'
+                          +   '<span class="aname">' + attrName + '</span>'
+                          +   '<input class="rt-inp" placeholder="Row" value="' + row + '">'
+                          +   '<input class="rt-inp" placeholder="Trm" value="' + trm + '">'
+                          +   '<button class="sv-btn" onclick="svA(this)">Save</button>'
+                          + '</div>';
+                });
+
+                html += '</div>';
+            });
+
+            $('#modeA').html(html);
+            $('#modeB').html('');   // individual-LOC mode — can populate later if needed
+        }
+                function selectAsset(el, assetId) {
+            $('#trackList .air, #trackList .fot-parent, #trackList .fot-child').removeClass('sel');
+            $(el).addClass('sel');
+            var assetName = $(el).text().trim();
+            $('#selAN').text(assetName);
+            loadAttributesForAsset(assetId);
+            // Open the Add Asset modal pre-filled with this asset
+            openAddAssetModal(assetId, assetName);
+        }
+        var __modalAsset    = null;
+        var __modalChannels = 6;
+        // ── State for the Add Asset modal ─────────────────────────────────────
+        var __modalAssetId       = null;   // null = new, number = edit
+        var __modalAssetTypeId   = null;
+        var __modalAssetTypeName = null;
+        var __modalAttributes    = [];     // [{id, title}, …] fetched from API
+
+        // ── Open modal: called from + button (new) OR selectAsset (edit) ──────
+        function openAddAssetModal(assetId, assetName) {
+            var $activeType = $('#atList .ati.on');
+            __modalAssetTypeId   = $activeType.length ? parseInt($activeType.data('type-id'), 10) : null;
+            __modalAssetTypeName = $activeType.length ? $activeType.data('type-name') : $('#adTitle').text();
+            __modalAssetId       = assetId || null;
+
+            if (!__modalAssetTypeId || !__currentSiteId) {
+                alert('Please select a station and asset type first.');
+                return;
+            }
+
+            $('#addAssetModalTitle').text(assetId ? (assetName || 'Edit Asset') : 'Add Asset');
+            $('#assetModalName').val(assetName || '');
+            $('#assetModalHttp').val('');
+            $('#assetModalCells').val('');
+            $('#assetModalActive').prop('checked', true);
+
+            // Show loading spinner in config table
+            $('#assetConfigBody').html(
+                '<tr><td colspan="4" style="text-align:center;padding:20px">'
+              + '<i class="bi bi-arrow-clockwise" style="animation:spin .7s linear infinite"></i> Loading…'
+              + '</td></tr>'
+            );
+
+            var modal = new bootstrap.Modal(document.getElementById('addAssetModal'));
+            modal.show();
+
+            // Call GetAssetTypeInfo — same as old site's AddAsset controller action
+            // Returns Asset with MQTTNoOfChannels + assetAttributes (pre-filled if edit)
+            $.ajax({
+                url: '@Url.Action("GetAssetTypeInfo", "Station")',
+                data: { assetTypeId: __modalAssetTypeId, siteId: __currentSiteId },
+                success: function (asset) {
+                    if (asset && !asset.error) {
+                        __modalAsset    = asset;
+                        __modalChannels = asset.mQTTNoOfChannels || 6;
+                        __modalAttributes = asset.assetAttributes || [];
+                        renderAssetConfigTable();
+                    } else {
+                        $('#assetConfigBody').html('<tr><td colspan="4" style="text-align:center;color:var(--err)">Failed to load attributes</td></tr>');
+                    }
+                },
+                error: function () {
+                    $('#assetConfigBody').html('<tr><td colspan="4" style="text-align:center;color:var(--err)">Request failed</td></tr>');
+                }
+            });
+        }
+        // ── Render Config tab rows from __modalAttributes ─────────────────────
+        function renderAssetConfigTable() {
+            var $body = $('#assetConfigBody');
+            if (!__modalAttributes || !__modalAttributes.length) {
+                $body.html('<tr><td colspan="4" style="text-align:center;color:var(--txm);padding:20px">No attributes for this asset type</td></tr>');
+                return;
+            }
+
+            var html = '';
+            __modalAttributes.forEach(function (attr) {
+                var title   = attr.title || attr.name || ('Attr ' + attr.id);
+                var selChan = attr.assetInfoChannel || '';
+                var selVal  = attr.assetInfoValue   || '';
+                var selMult = attr.multiplication   != null ? attr.multiplication : '';
+
+                // Build channel dropdown — Channel 1 to N (same as old site)
+                var chanOpts = '<option value="">Select Channel</option>';
+                for (var i = 1; i <= __modalChannels; i++) {
+                    var chVal = 'Channel' + i;
+                    chanOpts += '<option value="' + chVal + '"' + (selChan === chVal ? ' selected' : '') + '>Channel ' + i + '</option>';
+                }
+
+                html += '<tr>'
+                      +   '<td style="vertical-align:middle;font-weight:500">' + title + '</td>'
+                      +   '<td><select class="form-select form-select-sm cfg-channel" data-attr-id="' + attr.id + '">' + chanOpts + '</select></td>'
+                      +   '<td><input type="text" class="form-control form-control-sm cfg-value" data-attr-id="' + attr.id + '" value="' + selVal + '"></td>'
+                      +   '<td><input type="text" class="form-control form-control-sm cfg-mult"  data-attr-id="' + attr.id + '" value="' + selMult + '"></td>'
+                      + '</tr>';
+            });
+            $body.html(html);
+        }
+        // ── Save from modal → POST to /Station/SaveAsset ──────────────────────
+        function saveAssetFromModal() {
+            var name = $('#assetModalName').val().trim();
+            if (!name) { $('#assetModalName').focus(); return; }
+
+            // Build mAssetInfos — same structure as old site's fnSaveAsset
+            var mAssetInfos = [];
+            (__modalAttributes || []).forEach(function (attr) {
+                var channel = $('.cfg-channel[data-attr-id="' + attr.id + '"]').val();
+                var value   = $('.cfg-value[data-attr-id="'   + attr.id + '"]').val().trim();
+                var mult    = $('.cfg-mult[data-attr-id="'    + attr.id + '"]').val().trim();
+                mAssetInfos.push({
+                    AssetAttributeId: attr.id,
+                    Channel:          channel || '',
+                    Value:            value,
+                    Multiplication:   mult ? parseFloat(mult) : null
+                });
+            });
+
+            var payload = {
+                Id:           __modalAssetId || 0,
+                SiteId:       parseInt(__currentSiteId),
+                AssetTypeId:  __modalAssetTypeId,
+                Name:         name,
+                HttpMisLink:  $('#assetModalHttp').val().trim(),
+                NumberOfCell: parseFloat($('#assetModalCells').val()) || null,
+                IsActive:     $('#assetModalActive').is(':checked'),
+                mAssetInfos:  mAssetInfos
+            };
+
+            var $saveBtn = $('#addAssetModal .be7');
+            $saveBtn.prop('disabled', true).text('Saving…');
+
+            $.ajax({
+                url:         '@Url.Action("SaveAsset", "Station")',
+                type:        'POST',
+                contentType: 'application/json',
+                data:        JSON.stringify(payload),
+                success: function (res) {
+                    if (res && res.success) {
+                        $saveBtn.text('✓ Saved');
+                        setTimeout(function () {
+                            bootstrap.Modal.getInstance(document.getElementById('addAssetModal')).hide();
+                            $saveBtn.prop('disabled', false).text('Save');
+                            loadAssetsForType(__modalAssetTypeId, __modalAssetTypeName);
+                        }, 900);
+                    } else {
+                        alert(res && res.error ? res.error : 'Error saving asset.');
+                        $saveBtn.prop('disabled', false).text('Save');
+                    }
+                },
+                error: function () {
+                    alert('Request failed.');
+                    $saveBtn.prop('disabled', false).text('Save');
+                }
+            });
+        }
+        // ── Save selection → re-render sidebar → close offcanvas ────────
+                function saveAssetTypeConfig() {
+            var selectedIds = [];
+            var selectedNames = {};
+
+            $('#assetTypeConfigList .at-chk:checked').each(function () {
+                var id = parseInt($(this).val(), 10);
+                selectedIds.push(id);
+                selectedNames[id] = $(this).closest('label').find('span').text().trim();
+            });
+
+            saveTypeIds(__currentSiteId, selectedIds);
+
+            // Save names too so sidebar can show them without re-fetching
+            if (!__savedTypeNamesBySite) __savedTypeNamesBySite = {};
+            __savedTypeNamesBySite[__currentSiteId] = selectedNames;
+
+            renderAssetTypeSidebar();
+
+            var oc = bootstrap.Offcanvas.getInstance(document.getElementById('addTypeOC'));
+            if (oc) oc.hide();
+        }
+
+
+    </script>
+    <style>    @@keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }</style>
+}

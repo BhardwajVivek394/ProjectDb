@@ -1,0 +1,443 @@
+﻿@model Domain.Login
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login — Energy7</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --e7: #2c0e0e;
+            --co: #e16349;
+            --co-hv: #cc553d;
+            --bd: #e6cec8;
+            --bg: #f5f3f0;
+            --sf: #fff;
+            --tx: #1a0e0a;
+            --txm: #6b5e5a;
+            --txl: #9b8e89;
+            --err: #c0392b
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+            *:focus {
+                outline: none !important;
+                box-shadow: none !important
+            }
+
+        body {
+            font-family: 'DM Sans',sans-serif;
+            background: var(--bg);
+            margin: 0;
+            min-height: 100vh
+        }
+
+        .shell {
+            display: flex;
+            min-height: 100vh
+        }
+
+        /* ── LEFT ── */
+        .l-left {
+            width: 420px;
+            flex-shrink: 0;
+            background: var(--sf);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 52px 46px;
+            border-right: 1px solid var(--bd);
+        }
+
+        .brand {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--e7);
+            text-decoration: none;
+            letter-spacing: -.5px;
+            display: inline-block;
+            margin-bottom: 44px
+        }
+
+            .brand span {
+                color: var(--co)
+            }
+
+        .pg-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--tx);
+            margin-bottom: 4px
+        }
+
+        .pg-sub {
+            font-size: 13px;
+            color: var(--txm);
+            margin-bottom: 28px
+        }
+
+        .e7-err {
+            background: #fdecea;
+            border: 1px solid #f5c6c2;
+            border-radius: 7px;
+            color: var(--err);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 10px 14px;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .f-group {
+            margin-bottom: 16px
+        }
+
+        .f-lbl {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--txm);
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            display: block;
+            margin-bottom: 5px
+        }
+
+        .f-ctrl {
+            width: 100%;
+            border: 1px solid var(--bd);
+            border-radius: 7px;
+            padding: 10px 13px;
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--tx);
+            background: #fff;
+            transition: border-color .15s
+        }
+
+            .f-ctrl:focus {
+                border-color: var(--co)
+            }
+
+        .pw-wrap {
+            position: relative
+        }
+
+            .pw-wrap .f-ctrl {
+                padding-right: 42px
+            }
+
+        .pw-eye {
+            position: absolute;
+            right: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: var(--txl);
+            font-size: 16px
+        }
+
+            .pw-eye:hover {
+                color: var(--co)
+            }
+
+        .rm-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 24px
+        }
+
+        .rm-tog {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 18px;
+            flex-shrink: 0
+        }
+
+            .rm-tog input {
+                opacity: 0;
+                width: 0;
+                height: 0
+            }
+
+        .rm-sl {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: var(--bd);
+            border-radius: 9px;
+            transition: .2s
+        }
+
+            .rm-sl:before {
+                content: "";
+                position: absolute;
+                height: 13px;
+                width: 13px;
+                left: 3px;
+                bottom: 2.5px;
+                background: #fff;
+                border-radius: 50%;
+                transition: .2s
+            }
+
+        .rm-tog input:checked + .rm-sl {
+            background: var(--co)
+        }
+
+            .rm-tog input:checked + .rm-sl:before {
+                transform: translateX(16px)
+            }
+
+        .rm-lbl {
+            font-size: 12px;
+            color: var(--txm)
+        }
+
+        .btn-e7 {
+            width: 100%;
+            background: var(--co);
+            color: #fff;
+            border: none;
+            border-radius: 7px;
+            padding: 11px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: background .15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px
+        }
+
+            .btn-e7:hover {
+                background: var(--co-hv)
+            }
+
+            .btn-e7:disabled {
+                opacity: .6;
+                cursor: not-allowed
+            }
+
+        .l-footer {
+            font-size: 11px;
+            color: var(--txl);
+            text-align: center;
+            margin-top: 30px
+        }
+
+        /* ── RIGHT ── */
+        .l-right {
+            flex: 1;
+            background: var(--e7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .l-right::before {
+                content: "";
+                position: absolute;
+                width: 500px;
+                height: 500px;
+                border-radius: 50%;
+                border: 60px solid rgba(225,99,73,.07);
+                top: -120px;
+                right: -120px
+            }
+
+            .l-right::after {
+                content: "";
+                position: absolute;
+                width: 340px;
+                height: 340px;
+                border-radius: 50%;
+                border: 40px solid rgba(225,99,73,.05);
+                bottom: -80px;
+                left: -80px
+            }
+
+        .rb {
+            position: relative;
+            z-index: 2;
+            text-align: center
+        }
+
+        .rb-name {
+            font-size: 44px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: -1.5px;
+            line-height: 1
+        }
+
+            .rb-name span {
+                color: var(--co)
+            }
+
+        .rb-sub {
+            font-size: 13px;
+            color: rgba(255,255,255,.38);
+            margin-top: 10px;
+            margin-bottom: 38px
+        }
+
+        .pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            max-width: 360px
+        }
+
+        .pill {
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 20px;
+            color: rgba(255,255,255,.5);
+            font-size: 11px;
+            padding: 5px 15px
+        }
+
+            .pill i {
+                margin-right: 4px
+            }
+
+        @@keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .spin {
+            animation: spin .7s linear infinite;
+            display: inline-block
+        }
+
+        @@media(max-width:768px) {
+            .shell {
+                flex-direction: column
+            }
+
+            .l-left {
+                width: 100%;
+                padding: 32px 24px;
+                border-right: none;
+                border-bottom: 1px solid var(--bd)
+            }
+
+            .l-right {
+                min-height: 240px
+            }
+
+            .rb-name {
+                font-size: 32px
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+
+        <!-- ══ LEFT ══ -->
+        <div class="l-left">
+
+            <a href="/" class="brand">Energy<span>7</span></a>
+
+            <div class="pg-title">Welcome back</div>
+            <div class="pg-sub">Sign in to Station Survey</div>
+
+            @if (!string.IsNullOrEmpty(ViewBag.Error as string))
+            {
+                <div class="e7-err">
+                    <i class="bi bi-exclamation-circle-fill"></i>
+                    @ViewBag.Error
+                </div>
+            }
+
+            <form asp-action="Index" asp-controller="Login" method="post" id="loginForm">
+                @Html.AntiForgeryToken()
+
+                <div class="f-group">
+                    <label class="f-lbl">Email Address</label>
+                    <input asp-for="EmailAddress" class="f-ctrl" placeholder="you@example.com" autocomplete="email">
+                    <span asp-validation-for="EmailAddress" style="font-size:11px;color:var(--err)"></span>
+                </div>
+
+                <div class="f-group">
+                    <label class="f-lbl">Password</label>
+                    <div class="pw-wrap">
+                        <input asp-for="Password" type="password" id="pwdInput" class="f-ctrl" placeholder="Enter password" autocomplete="current-password">
+                        <span class="pw-eye" onclick="togglePwd()"><i class="bi bi-eye" id="pwIcon"></i></span>
+                    </div>
+                    <span asp-validation-for="Password" style="font-size:11px;color:var(--err)"></span>
+                </div>
+
+                <div class="rm-row">
+                    <label class="rm-tog">
+                        <input type="checkbox" asp-for="RememberMe">
+                        <span class="rm-sl"></span>
+                    </label>
+                    <span class="rm-lbl">Remember me for 15 days</span>
+                </div>
+
+                <button type="submit" class="btn-e7" id="btnLogin">
+                    <span id="btnText">Sign In</span>
+                    <span id="btnSpinner" style="display:none"><i class="bi bi-arrow-clockwise spin"></i> Signing in…</span>
+                </button>
+            </form>
+
+            <div class="l-footer">&copy; @DateTime.Now.Year Energy7 · All rights reserved</div>
+        </div>
+
+        <!-- ══ RIGHT ══ -->
+        <div class="l-right">
+            <div class="rb">
+                <div class="rb-name">Energy<span>7</span></div>
+                <div class="rb-sub">Railway Monitoring &amp; Inspection System</div>
+                <div class="pills">
+                    <span class="pill"><i class="bi bi-cpu"></i>Station Survey</span>
+                    <span class="pill"><i class="bi bi-geo-alt"></i>Location Mapping</span>
+                    <span class="pill"><i class="bi bi-activity"></i>Live Monitoring</span>
+                    <span class="pill"><i class="bi bi-bar-chart"></i>Analytics</span>
+                    <span class="pill"><i class="bi bi-file-earmark-check"></i>Reports</span>
+                    <span class="pill"><i class="bi bi-diagram-3"></i>Yard Config</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', function () {
+          document.getElementById('btnText').style.display    = 'none';
+          document.getElementById('btnSpinner').style.display = 'inline-flex';
+          document.getElementById('btnLogin').disabled        = true;
+        });
+
+        function togglePwd() {
+          var inp  = document.getElementById('pwdInput');
+          var icon = document.getElementById('pwIcon');
+          inp.type       = inp.type === 'password' ? 'text' : 'password';
+          icon.className = inp.type === 'text' ? 'bi bi-eye-slash' : 'bi bi-eye';
+        }
+    </script>
+</body>
+</html>
