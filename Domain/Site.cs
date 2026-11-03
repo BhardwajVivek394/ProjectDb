@@ -58,6 +58,10 @@ namespace Domain
         public bool? IsCombinePointMachine { get; set; }
         public bool? IsFRSAlert { get; set; }
         public bool? IsSiemensPoint { get; set; }
+        public int? ServerType { get; set; }
+        public int? OEMType { get; set; }
+        public bool? IsEquipmentRoomDynamic { get; set; }
+        public bool? IsProject { get; set; }
         //extra
         public int UserId { get; set; }
         public int RoleId { get; set; }

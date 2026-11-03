@@ -18,6 +18,8 @@
         <label>Station</label>
         <select id="ddStation" asp-items="ViewBag.Sites" onchange="onStationChange(this.value)">
         </select>
+        <button class="bg7" id="btnEditStation" title="Edit station" disabled
+                onclick="openStationModal($('#ddStation').val())"><i class="bi bi-pencil-square"></i> Edit</button>
     </div>
     <div class="dv"></div>
     <div class="sbadge"><span class="dot"></span><span id="badgeStatus">Select Station</span></div>
@@ -90,6 +92,21 @@
                         <div style="font-size:11px;line-height:1.7">2 Cluster space N/A · 17 Cluster 110V PS issue</div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- SURVEY stage checklist — all items ticked marks the stage Completed -->
+        <div class="ic" id="surveyCard" style="margin-top:12px">
+            <h6 style="display:flex;align-items:center;gap:8px">
+                <i class="bi bi-clipboard-check"></i> Survey Stage Checklist
+                <span id="surveyProgress" style="font-size:11px;font-weight:600;color:var(--txm)"></span>
+                <span id="surveyStageBadge" style="margin-left:auto;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px"></span>
+            </h6>
+            <div style="height:5px;background:var(--bd);border-radius:3px;overflow:hidden;margin:4px 0 10px">
+                <div id="surveyBar" style="height:100%;width:0;background:var(--ok);transition:width .2s"></div>
+            </div>
+            <div id="surveyList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:4px 20px;font-size:12px">
+                <div style="color:var(--txm);font-size:11px">Select a station</div>
             </div>
         </div>
     </div>
@@ -203,36 +220,105 @@
 
     <!-- ── LOCATION ── -->
     <div class="tp" id="tab-location">
+        <!-- Location = a Cluster row named "cluster_{RF no}/{location}", same as 90 Yard Config → Create Cluster.
+             RF cluster boxes group the locations sharing one RF cluster number. Cards / modem are set up in Yard Config. -->
         <div class="loc-top">
             <div class="cr-box">
                 <h6><i class="bi bi-plus-circle"></i> Create Location</h6>
                 <div class="cr-row">
-                    <input type="text" placeholder="Location name e.g. LOC-65">
-                    <select><option>Outdoor</option><option>Indoor</option></select>
-                    <button class="be7" style="padding:5px 12px">Add</button>
+                    <input type="text" id="locNewName" placeholder="Location name e.g. LOC-65">
+                    <select id="locNewType"><option value="2">Outdoor</option><option value="1">Indoor</option></select>
+                    <select id="locNewPower" title="Power supply">
+                        <option value="">Power supply</option>
+                        <option value="1">24 V</option>
+                        <option value="2">110 V</option>
+                        <option value="3">Converter 110→24 V</option>
+                    </select>
+                    <select id="locNewRf" title="RF cluster"></select>
+                    <button class="be7" style="padding:5px 12px" onclick="createLocation()">Add</button>
                 </div>
             </div>
             <div class="cr-box">
-                <h6><i class="bi bi-diagram-2"></i> Create Cluster</h6>
+                <h6><i class="bi bi-diagram-2"></i> Create RF Cluster</h6>
                 <div class="cr-row">
-                    <input type="text" placeholder="Cluster name e.g. CL-42">
-                    <select><option>Group</option><option>Single</option></select>
-                    <button class="be7" style="padding:5px 12px">Add</button>
+                    <select id="locNewCluster" style="flex:1"></select>
+                    <button class="be7" style="padding:5px 12px" onclick="addRfClusterBox()">Add</button>
                 </div>
+                <div style="font-size:10px;color:var(--txm);margin-top:6px">An empty RF cluster is saved once a location is added or dragged into it.</div>
             </div>
         </div>
         <div class="loc-layout">
             <div class="loc-pool">
-                <h6>Unassigned Locations</h6>
-                <div class="loc-card-wrap"><div class="loc-card-inner"><span class="grip">⠿</span><span class="ln">LOC-41</span><span class="ld">Outdoor</span></div></div>
-                <div class="loc-card-wrap"><div class="loc-card-inner"><span class="grip">⠿</span><span class="ln">LOC-42</span><span class="ld">Outdoor</span></div></div>
+                <h6>Without RF Cluster</h6>
+                <div id="locPool"><div style="font-size:10px;color:var(--txl)">Select a station</div></div>
             </div>
-            <div class="clust-area">
-                <div class="clust-box">
-                    <div class="clust-head"><span class="cn">CL-1</span><span class="ct group">Group</span></div>
-                    <div class="clust-drop">
-                        <div class="clust-loc-wrap"><div class="clust-loc-inner"><span class="cl-name">LOC-1</span><span class="cl-info">Outdoor</span><span class="cl-role master">Master</span><span class="cl-rm">×</span></div></div>
-                        <div class="clust-loc-wrap"><div class="clust-loc-inner"><span class="cl-name">LOC-2</span><span class="cl-info">Outdoor</span><span class="cl-role slave">Slave</span><span class="cl-rm">×</span></div></div>
+            <div class="clust-area" id="locClusters">
+                <div style="font-size:11px;color:var(--txm)">Select a station</div>
+            </div>
+        </div>
+
+        <!-- Survey gear mapping (before yard) — existing SiteSurvey table, same grid as the 90 Site Survey page -->
+        <div class="cr-box" style="margin-top:14px">
+            <h6 style="display:flex;align-items:center;gap:8px">
+                <i class="bi bi-signpost-split"></i> Survey Gear Mapping (before Yard Config)
+                <button class="be7" style="margin-left:auto;padding:4px 12px" onclick="addGearRow()"><i class="bi bi-plus"></i> Add Location Box</button>
+            </h6>
+            <div style="font-size:10px;color:var(--txm);margin-bottom:8px">
+                One row per location box. Enter gear names separated by commas, e.g. TR: <b>1T, 2T</b>. Names are saved in upper case, like on the 90 site.
+            </div>
+            <div style="overflow-x:auto">
+                <table class="table table-sm" style="font-size:11px;margin:0;min-width:1100px">
+                    <thead>
+                        <tr style="color:var(--txm)">
+                            <th style="width:60px">RF Cl.</th><th style="width:110px">Location Box</th><th style="width:70px">Side</th>
+                            <th style="width:80px">Dist. RR</th><th>TR</th><th>TF</th><th>Point Machine</th><th>Signal</th>
+                            <th>Axle Counter</th><th>Bus Bar</th><th>UFSBI</th><th>BHMS</th><th style="width:90px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="gearBody"><tr><td colspan="13" style="color:var(--txm)">Select a station</td></tr></tbody>
+                </table>
+            </div>
+            <datalist id="gearLocList"></datalist>
+            <div id="gearCoverage" style="font-size:11px;margin-top:8px"></div>
+        </div>
+
+        <!-- Edit location -->
+        <div class="modal fade" id="locEditModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-geo-alt me-2" style="color:var(--co)"></i>Edit Location</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="locEditId">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label>Location Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="locEditName">
+                            </div>
+                            <div class="col-6">
+                                <label>Type</label>
+                                <select class="form-select" id="locEditType"><option value="2">Outdoor</option><option value="1">Indoor</option></select>
+                            </div>
+                            <div class="col-6">
+                                <label>RF Cluster</label>
+                                <select class="form-select" id="locEditRf"></select>
+                            </div>
+                            <div class="col-12">
+                                <label>Power Supply</label>
+                                <select class="form-select" id="locEditPower">
+                                    <option value="">Not set</option>
+                                    <option value="1">24 V</option>
+                                    <option value="2">110 V</option>
+                                    <option value="3">Converter 110 to 24 V</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="border-top:1px solid var(--bd);padding:10px 18px">
+                        <button class="bg7" data-bs-dismiss="modal">Cancel</button>
+                        <button class="be7" onclick="saveEditedLocation()">Save</button>
                     </div>
                 </div>
             </div>
@@ -342,44 +428,120 @@
                     </div>
                 </div>
 
-                <!-- Sub-tabs: Config (active) + disabled others matching old site -->
-                <ul class="nav nav-tabs" style="font-size:12px;margin-bottom:12px;border-bottom:1px solid var(--bd)">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="#" style="font-size:12px;padding:6px 12px">Config</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link disabled" href="#" style="font-size:12px;padding:6px 12px;color:var(--txm)">Signal Mapping</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link disabled" href="#" style="font-size:12px;padding:6px 12px;color:var(--txm)">Alerts</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link disabled" href="#" style="font-size:12px;padding:6px 12px;color:var(--txm)">FRSAlerts</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link disabled" href="#" style="font-size:12px;padding:6px 12px;color:var(--txm)">Cause Code Activation</a>
-                    </li>
+                <!-- Point Machine details (Asset columns, same fields as the 90 Add Asset for Point Machine) -->
+                <div id="assetModalPM" style="display:none;border:1px solid var(--bd);border-radius:7px;padding:10px 12px;margin-bottom:14px">
+                    <div style="font-size:10px;font-weight:700;color:var(--co);text-transform:uppercase;margin-bottom:8px">Point Machine Details</div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+                        <div>
+                            <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Full / Half</label>
+                            <select id="pmHalf" class="form-select form-select-sm"><option value="0">Full</option><option value="1">Half</option></select>
+                        </div>
+                        <div>
+                            <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Operation</label>
+                            <select id="pmSeries" class="form-select form-select-sm" onchange="pmToggle()"><option value="0">Parallel</option><option value="1">Series</option></select>
+                        </div>
+                        <div class="pm-series">
+                            <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Series Type</label>
+                            <select id="pmSeriesType" class="form-select form-select-sm"><option value="1">LH</option><option value="2">RH</option></select>
+                        </div>
+                        <div>
+                            <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Switch (IRS / TWS)</label>
+                            <select id="pmTws" class="form-select form-select-sm" onchange="pmToggle()">
+                                <option value="0">IRS</option>
+                                <option value="1">TWS – A-End</option>
+                                <option value="2">TWS – B-End</option>
+                                <option value="3">TWS – Both</option>
+                            </select>
+                        </div>
+                        <div class="pm-series" style="grid-column:span 2">
+                            <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">A-End (Direction A)</label>
+                            <input type="text" id="pmAliasA" class="form-control form-control-sm" placeholder="Direction A name">
+                        </div>
+                        <div class="pm-series" style="grid-column:span 2">
+                            <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">B-End (Direction B)</label>
+                            <input type="text" id="pmAliasB" class="form-control form-control-sm" placeholder="Direction B name">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sub-tabs, same as the 90 Add Asset (Signal Mapping only for Track) -->
+                <ul class="nav nav-tabs" id="assetModalTabs" style="font-size:12px;margin-bottom:12px;border-bottom:1px solid var(--bd)">
+                    <li class="nav-item"><button type="button" class="nav-link active" data-bs-toggle="tab" data-bs-target="#amConfig" style="font-size:12px;padding:6px 12px">Config</button></li>
+                    <li class="nav-item" id="amSignalMapTab" style="display:none"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#amSignalMap" style="font-size:12px;padding:6px 12px">Signal Mapping</button></li>
+                    <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#amAlerts" style="font-size:12px;padding:6px 12px">Alerts</button></li>
+                    <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#amFRS" style="font-size:12px;padding:6px 12px">FRSAlerts</button></li>
+                    <li class="nav-item"><button type="button" class="nav-link" data-bs-toggle="tab" data-bs-target="#amCause" style="font-size:12px;padding:6px 12px">Cause Code Activation</button></li>
                 </ul>
 
-                <!-- Config tab body: Attributes / Channels / Value / Multiplication -->
-                <div style="max-height:280px;overflow-y:auto">
-                    <table class="table table-sm" style="font-size:12px;margin-bottom:0">
-                        <thead style="position:sticky;top:0;background:#fff;z-index:1">
-                            <tr style="border-bottom:1px solid var(--bd)">
-                                <th style="font-weight:600;color:var(--txm);width:30%">Attributes</th>
-                                <th style="font-weight:600;color:var(--txm);width:30%">Channels</th>
-                                <th style="font-weight:600;color:var(--txm);width:20%">Value</th>
-                                <th style="font-weight:600;color:var(--txm);width:20%">Multiplication</th>
-                            </tr>
-                        </thead>
-                        <tbody id="assetConfigBody">
-                            <tr>
-                                <td colspan="4" style="text-align:center;color:var(--txm);padding:20px">
-                                    <i class="bi bi-arrow-clockwise" style="animation:spin .7s linear infinite"></i> Loading attributes…
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="tab-content" style="max-height:280px;overflow-y:auto">
+                    <!-- Config: Attributes / Channels / Value / Multiplication -->
+                    <div class="tab-pane fade show active" id="amConfig">
+                        <table class="table table-sm" style="font-size:12px;margin-bottom:0">
+                            <thead style="position:sticky;top:0;background:#fff;z-index:1">
+                                <tr style="border-bottom:1px solid var(--bd)">
+                                    <th style="font-weight:600;color:var(--txm);width:30%">Attributes</th>
+                                    <th style="font-weight:600;color:var(--txm);width:30%">Channels</th>
+                                    <th style="font-weight:600;color:var(--txm);width:20%">Value</th>
+                                    <th style="font-weight:600;color:var(--txm);width:20%">Multiplication</th>
+                                </tr>
+                            </thead>
+                            <tbody id="assetConfigBody">
+                                <tr>
+                                    <td colspan="4" style="text-align:center;color:var(--txm);padding:20px">
+                                        <i class="bi bi-arrow-clockwise" style="animation:spin .7s linear infinite"></i> Loading attributes…
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Signal Mapping (Track): signals of this station linked to the track -->
+                    <div class="tab-pane fade" id="amSignalMap">
+                        <table class="table table-sm" style="font-size:12px;margin-bottom:0">
+                            <thead style="position:sticky;top:0;background:#fff;z-index:1"><tr><th style="font-weight:600;color:var(--txm)">Signals</th></tr></thead>
+                            <tbody id="amSignalMapBody"></tbody>
+                        </table>
+                    </div>
+                    <!-- Alerts: active / alert name / operator / value -->
+                    <div class="tab-pane fade" id="amAlerts">
+                        <table class="table table-sm" style="font-size:12px;margin-bottom:0">
+                            <thead style="position:sticky;top:0;background:#fff;z-index:1">
+                                <tr>
+                                    <th style="width:40px"></th>
+                                    <th style="font-weight:600;color:var(--txm)">Alert Name</th>
+                                    <th style="font-weight:600;color:var(--txm);width:30%">Operators</th>
+                                    <th style="font-weight:600;color:var(--txm);width:25%">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="amAlertsBody"></tbody>
+                        </table>
+                    </div>
+                    <!-- FRS Alerts: ranges per attribute -->
+                    <div class="tab-pane fade" id="amFRS">
+                        <table class="table table-sm" style="font-size:12px;margin-bottom:0">
+                            <thead style="position:sticky;top:0;background:#fff;z-index:1">
+                                <tr>
+                                    <th style="font-weight:600;color:var(--txm)">Attributes</th>
+                                    <th style="font-weight:600;color:var(--txm)">Max Safe Value</th>
+                                    <th style="font-weight:600;color:var(--txm)">Average Value</th>
+                                    <th style="font-weight:600;color:var(--txm)">Min Safe Value</th>
+                                    <th style="font-weight:600;color:var(--txm)">Min Fail Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="amFRSBody"></tbody>
+                        </table>
+                    </div>
+                    <!-- Cause Code Activation -->
+                    <div class="tab-pane fade" id="amCause">
+                        <table class="table table-sm" style="font-size:12px;margin-bottom:0">
+                            <thead style="position:sticky;top:0;background:#fff;z-index:1">
+                                <tr>
+                                    <th style="font-weight:600;color:var(--txm)">Cause Code</th>
+                                    <th style="font-weight:600;color:var(--txm);width:80px;text-align:center">Active</th>
+                                </tr>
+                            </thead>
+                            <tbody id="amCauseBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer" style="padding:10px 18px;border-top:1px solid var(--bd)">
@@ -434,7 +596,17 @@
             var zoneName     = $('#ddZone option:selected').text();
             var divisionName = $('#ddDivision option:selected').text();
 
-            if (!siteId || siteId == 0) { resetStats(); return; }
+            $('#btnEditStation').prop('disabled', !siteId || siteId == 0);
+            if (!siteId || siteId == 0) {
+                resetStats();
+                $('#surveyList').html('<div style="color:var(--txm);font-size:11px">Select a station</div>');
+                $('#surveyProgress, #surveyStageBadge').text('').css('background', '');
+                $('#surveyBar').css('width', 0);
+                __locSiteId = 0; __locations = [];
+                $('#locClusters').html('<div style="font-size:11px;color:var(--txm)">Select a station</div>');
+                $('#locPool').html('<div style="font-size:10px;color:var(--txl)">Select a station</div>');
+                return;
+            }
 
             // Update info panel immediately
             $('#infoName').text(stationName);
@@ -456,7 +628,349 @@
                 },
                 error: function () { resetStats(); }
             });
+             __siteAssets = []; __siteAssetsLoaded = false;
              loadAssetTypes(siteId);
+             loadSiteAssets(siteId, function () {
+                 if (__siteAssetTypes.length) renderAssetTypeSidebar();   // refresh counts + list
+                 renderGearCoverage();                                     // unmapped gear needs the asset list
+             });
+             loadSurveyChecklist(siteId);
+             loadLocations(siteId);
+        }
+
+        // ── LOCATION tab — Cluster rows "cluster_{RF}/{location}" via the API ─────────
+        var __locations    = [];
+        var __locSiteId    = 0;
+        var __extraRfBoxes = [];   // RF clusters added on screen but with no location saved yet
+        var __locDragId    = 0;
+
+        var LOC_POWER = { 1: '24 V', 2: '110 V', 3: '110→24 V' };   // Cluster.PowerSupplyId (90 PowerSupplyType)
+
+        function locEsc(v) { return $('<div>').text(v == null ? '' : v).html().replace(/"/g, '&quot;'); }
+
+        function loadLocations(siteId) {
+            __locSiteId = siteId; __extraRfBoxes = []; __locations = [];
+            $('#locClusters').html('<div style="font-size:11px;color:var(--txm)">Loading…</div>');
+            $.ajax({
+                url: '@Url.Action("GetLocations", "Station")',
+                data: { siteId: siteId },
+                success: function (res) {
+                    if (siteId != __locSiteId) return;
+                    if (!Array.isArray(res)) { $('#locClusters').html('<div style="font-size:11px;color:var(--err)">' + locEsc((res && res.error) || 'Failed to load') + '</div>'); return; }
+                    __locations = res;
+                    renderLocations();
+                    loadSurveyGear(siteId);
+                },
+                error: function () { $('#locClusters').html('<div style="font-size:11px;color:var(--err)">Request failed</div>'); }
+            });
+        }
+
+        // ── Survey gear mapping (SiteSurvey rows) ───────────────────────────────────
+        var __gearRows = [];
+        var GEAR_COLS = ['TR', 'TF', 'PointMachine', 'Signal', 'AxleCounter', 'BusBar', 'UFSBI', 'BHMS'];
+
+        function loadSurveyGear(siteId) {
+            $.ajax({
+                url: '@Url.Action("GetSurveyGear", "Station")',
+                data: { siteId: siteId },
+                success: function (res) {
+                    if (siteId != __locSiteId) return;
+                    if (!Array.isArray(res)) { $('#gearBody').html('<tr><td colspan="13" style="color:var(--err)">' + locEsc((res && res.error) || 'Failed to load') + '</td></tr>'); return; }
+                    __gearRows = res;
+                    renderGear();
+                }
+            });
+        }
+
+        // JSON is camelCased by ASP.NET ("tr", "ufsbi", "pointMachine"…), so match keys case-insensitively
+        function gearVal(r, key) {
+            var lk = key.toLowerCase();
+            for (var k in r) if (k.toLowerCase() === lk) return r[k] != null ? r[k] : '';
+            return '';
+        }
+
+        function gearRowHtml(r) {
+            var id = r.id || 0;
+            var html = '<tr data-id="' + id + '">'
+                + '<td><input class="form-control form-control-sm g-cluster" type="number" min="1" max="50" value="' + (r.cluster || '') + '"></td>'
+                + '<td><input class="form-control form-control-sm g-box" list="gearLocList" value="' + locEsc(r.locationBoxNo) + '" onchange="gearBoxPicked(this)"></td>'
+                + '<td><input class="form-control form-control-sm g-side" value="' + locEsc(r.locationSide) + '"></td>'
+                + '<td><input class="form-control form-control-sm g-dist" value="' + locEsc(r.distanceFromRR) + '"></td>';
+            GEAR_COLS.forEach(function (c) {
+                html += '<td><input class="form-control form-control-sm g-' + c + '" value="' + locEsc(gearVal(r, c)) + '"></td>';
+            });
+            html += '<td style="white-space:nowrap">'
+                + '<button class="sv-btn" style="background:var(--ok);border:none;color:#fff;font-size:10px;padding:3px 8px;border-radius:3px" onclick="saveGearRow(this)">Save</button> '
+                + '<span class="cl-rm" title="Delete row" onclick="deleteGearRow(this)">×</span>'
+                + '</td></tr>';
+            return html;
+        }
+
+        function renderGear() {
+            // Location suggestions = this station's locations (Location tab)
+            $('#gearLocList').html(__locations.map(function (l) { return '<option value="' + locEsc((l.location || '').toUpperCase()) + '">'; }).join(''));
+            var rows = __gearRows.slice().sort(function (a, b) { return (a.cluster - b.cluster) || String(a.locationBoxNo).localeCompare(String(b.locationBoxNo), undefined, { numeric: true }); });
+            $('#gearBody').html(rows.length ? rows.map(gearRowHtml).join('')
+                : '<tr><td colspan="13" style="color:var(--txm)">No survey rows yet — click "Add Location Box"</td></tr>');
+            renderGearCoverage();
+        }
+
+        function addGearRow() {
+            if (!__locSiteId) { alert('Select a station first'); return; }
+            if (!$('#gearBody tr[data-id]').length) $('#gearBody').empty();
+            $('#gearBody').append(gearRowHtml({}));
+        }
+
+        // Picking a known location fills its RF cluster number
+        function gearBoxPicked(inp) {
+            var v = inp.value.trim().toUpperCase();
+            var l = __locations.filter(function (x) { return (x.location || '').toUpperCase() === v; })[0];
+            if (l && l.rfCluster) $(inp).closest('tr').find('.g-cluster').val(l.rfCluster);
+        }
+
+        function saveGearRow(btn) {
+            var $r = $(btn).closest('tr');
+            var body = {
+                Id: parseInt($r.data('id'), 10) || 0, SiteId: __locSiteId,
+                Cluster: parseInt($r.find('.g-cluster').val(), 10) || 0,
+                LocationBoxNo: $r.find('.g-box').val(), LocationSide: $r.find('.g-side').val(),
+                DistanceFromRR: $r.find('.g-dist').val()
+            };
+            GEAR_COLS.forEach(function (c) { body[c] = $r.find('.g-' + c).val(); });
+            if (!body.LocationBoxNo.trim()) { alert('Enter the location box'); return; }
+            if (!body.Cluster) { alert('Enter the RF cluster number'); return; }
+            btn.disabled = true; btn.textContent = '…';
+            $.ajax({
+                url: '@Url.Action("SaveSurveyGear", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify(body),
+                success: function (res) {
+                    if (res && res.success) loadSurveyGear(__locSiteId);
+                    else { alert((res && res.error) || 'Save failed'); btn.disabled = false; btn.textContent = 'Save'; }
+                },
+                error: function () { alert('Request failed'); btn.disabled = false; btn.textContent = 'Save'; }
+            });
+        }
+
+        function deleteGearRow(el) {
+            var $r = $(el).closest('tr');
+            var id = parseInt($r.data('id'), 10) || 0;
+            if (!id) { $r.remove(); return; }   // unsaved row
+            if (!confirm('Delete survey row "' + $r.find('.g-box').val() + '"? This removes it permanently (also on the 90 site).')) return;
+            $.post('@Url.Action("DeleteSurveyGear", "Station")', { id: id, siteId: __locSiteId }, function (res) {
+                if (res && res.success) loadSurveyGear(__locSiteId); else alert((res && res.error) || 'Delete failed');
+            });
+        }
+
+        // Point 5: which Track / Signal / Point Machine assets are not mapped to any location box yet
+        function renderGearCoverage() {
+            function names(col) {
+                var set = {};
+                __gearRows.forEach(function (r) {
+                    String(gearVal(r, col) || '').split(/[,;]+/).forEach(function (n) { n = n.trim().toUpperCase(); if (n) set[n] = true; });
+                });
+                return set;
+            }
+            var tr = names('TR'), tf = names('TF'), pm = names('PointMachine'), sg = names('Signal');
+            function missing(typeId, test) {
+                return __siteAssets.filter(function (a) { return a.assetTypeId === typeId && !test((a.name || '').trim().toUpperCase()); })
+                                   .map(function (a) { return a.name; });
+            }
+            var parts = [
+                ['Tracks without TR', missing(1, function (n) { return tr[n]; })],
+                ['Tracks without TF', missing(1, function (n) { return tf[n]; })],
+                ['Point machines', missing(3, function (n) { return pm[n]; })],
+                ['Signals', missing(2, function (n) { return sg[n]; })]
+            ];
+            if (!__siteAssetsLoaded) { $('#gearCoverage').html(''); return; }
+            var html = parts.map(function (p) {
+                return p[1].length
+                    ? '<div><b style="color:var(--warn)">' + p[0] + ' not mapped (' + p[1].length + '):</b> ' + p[1].map(locEsc).join(', ') + '</div>'
+                    : '<div style="color:var(--ok)">✓ ' + p[0].replace(' without', ' — all have') + ' mapped</div>';
+            }).join('');
+            $('#gearCoverage').html(html);
+        }
+
+        function locWiredCount(clusterId) {
+            return __cardLines.filter(function (r) { return r.clusterId === clusterId && r.assetId; }).length;
+        }
+
+        function locChip(l) {
+            var wired = locWiredCount(l.id);
+            return '<div class="clust-loc-wrap"><div class="clust-loc-inner" draggable="true" data-loc-id="' + l.id + '" '
+                 +   'ondragstart="__locDragId=' + l.id + ';this.style.opacity=.4" ondragend="this.style.opacity=\'\'" '
+                 +   'title="' + locEsc(l.name) + (l.modemId ? ' · Modem ' + locEsc(l.modemId) : '') + '">'
+                 +   '<span class="grip" style="color:var(--txl)">⠿</span>'
+                 +   '<span class="cl-name">' + locEsc(l.location) + '</span>'
+                 +   '<span class="cl-info">' + (l.typeId === 1 ? 'Indoor' : 'Outdoor') + '</span>'
+                 +   (l.powerSupplyId ? '<span class="cl-info" style="color:var(--info)">' + LOC_POWER[l.powerSupplyId] + '</span>'
+                                      : '<span class="cl-info" style="color:var(--warn)">no PS</span>')
+                 +   '<span class="cl-info">' + wired + ' wired</span>'
+                 +   '<span class="cl-set" onclick="editLocation(' + l.id + ')">edit</span>'
+                 + '</div></div>';
+        }
+
+        function renderLocations() {
+            var byRf = {};
+            var pool = [];
+            __locations.forEach(function (l) {
+                if (l.rfCluster) (byRf[l.rfCluster] = byRf[l.rfCluster] || []).push(l); else pool.push(l);
+            });
+            __extraRfBoxes.forEach(function (n) { byRf[n] = byRf[n] || []; });
+
+            $('#locPool').html(pool.length ? pool.map(locChip).join('')
+                : '<div style="font-size:10px;color:var(--txl)">None — every location has an RF cluster</div>');
+
+            var rfs = Object.keys(byRf).map(Number).sort(function (a, b) { return a - b; });
+            var html = '';
+            rfs.forEach(function (n) {
+                var locs = byRf[n];
+                html += '<div class="clust-box">'
+                      +   '<div class="clust-head"><span class="cn">RF Cluster ' + n + '</span>'
+                      +     '<span class="ct group">' + locs.length + ' location' + (locs.length === 1 ? '' : 's') + '</span></div>'
+                      +   '<div class="clust-drop" data-rf="' + n + '" ondragover="event.preventDefault();this.classList.add(\'drag-over\')" '
+                      +     'ondragleave="this.classList.remove(\'drag-over\')" ondrop="dropLocation(event,this)">'
+                      +     (locs.length ? locs.map(locChip).join('') : '<div class="empty-msg">Drag a location here, or add one with this RF cluster</div>')
+                      +   '</div>'
+                      + '</div>';
+            });
+            $('#locClusters').html(html || '<div style="font-size:11px;color:var(--txm)">No locations yet — create one above</div>');
+            $('#tabLocationCount').text(__locations.length);
+
+            // RF cluster dropdowns (1–50, as on 90). Create Location defaults to the first existing RF cluster.
+            var used = {}; rfs.forEach(function (n) { used[n] = true; });
+            var rfOpts = '', freeOpts = '';
+            for (var i = 1; i <= 50; i++) {
+                rfOpts += '<option value="' + i + '">RF ' + i + (used[i] ? '' : ' (new)') + '</option>';
+                if (!used[i]) freeOpts += '<option value="' + i + '">RF Cluster ' + i + '</option>';
+            }
+            var keep = $('#locNewRf').val();
+            $('#locNewRf').html(rfOpts).val(keep || (rfs[0] || 1));
+            $('#locNewCluster').html(freeOpts || '<option value="">All 50 in use</option>');
+        }
+
+        function addRfClusterBox() {
+            if (!__locSiteId) { alert('Select a station first'); return; }
+            var n = parseInt($('#locNewCluster').val(), 10);
+            if (!n) return;
+            __extraRfBoxes.push(n);
+            renderLocations();
+            $('#locNewRf').val(n);
+        }
+
+        function saveLocation(data, done) {
+            $.ajax({
+                url: '@Url.Action("SaveLocation", "Station")',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(data),
+                success: function (res) {
+                    if (res && res.success) { if (done) done(); loadLocations(__locSiteId); }
+                    else alert((res && res.error) || 'Save failed');
+                },
+                error: function () { alert('Request failed'); }
+            });
+        }
+
+        function createLocation() {
+            if (!__locSiteId) { alert('Select a station first'); return; }
+            var name = $('#locNewName').val().trim();
+            if (!name) { $('#locNewName').focus(); return; }
+            saveLocation({
+                Id: 0, SiteId: __locSiteId, LocationName: name,
+                TypeId: parseInt($('#locNewType').val(), 10),
+                PowerSupplyId: parseInt($('#locNewPower').val(), 10) || null,
+                RfCluster: parseInt($('#locNewRf').val(), 10)
+            }, function () { $('#locNewName').val(''); });
+        }
+
+        function editLocation(id) {
+            var l = __locations.filter(function (x) { return x.id === id; })[0];
+            if (!l) return;
+            var rfOpts = '';
+            for (var i = 1; i <= 50; i++) rfOpts += '<option value="' + i + '">RF ' + i + '</option>';
+            $('#locEditRf').html(rfOpts).val(l.rfCluster || $('#locNewRf').val());
+            $('#locEditId').val(l.id);
+            $('#locEditName').val(l.location);
+            $('#locEditType').val(l.typeId === 1 ? '1' : '2');
+            $('#locEditPower').val(l.powerSupplyId ? String(l.powerSupplyId) : '');
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('locEditModal')).show();
+        }
+
+        function saveEditedLocation() {
+            var l = __locations.filter(function (x) { return x.id === parseInt($('#locEditId').val(), 10); })[0];
+            if (!l) return;
+            var rf = parseInt($('#locEditRf').val(), 10);
+            if (l.rfCluster && rf !== l.rfCluster &&
+                !confirm('Move "' + l.location + '" to RF Cluster ' + rf + ' at this station only?\n\n'
+                       + 'The 90 site will also show this station\'s location under RF Cluster ' + rf + '.')) return;
+            saveLocation({
+                Id: l.id, SiteId: __locSiteId,
+                LocationName: $('#locEditName').val().trim(),
+                TypeId: parseInt($('#locEditType').val(), 10),
+                PowerSupplyId: parseInt($('#locEditPower').val(), 10) || null,
+                RfCluster: rf
+            }, function () { bootstrap.Modal.getOrCreateInstance(document.getElementById('locEditModal')).hide(); });
+        }
+
+        function dropLocation(e, box) {
+            e.preventDefault();
+            box.classList.remove('drag-over');
+            var l = __locations.filter(function (x) { return x.id === __locDragId; })[0];
+            __locDragId = 0;
+            var rf = parseInt(box.getAttribute('data-rf'), 10);
+            if (!l || !rf || l.rfCluster === rf) return;
+            if (!confirm('Move "' + l.location + '" to RF Cluster ' + rf + ' at this station only?\n\n'
+                       + 'The 90 site will also show this station\'s ' + l.location + ' under RF Cluster ' + rf + '.')) return;
+            saveLocation({ Id: l.id, SiteId: __locSiteId, LocationName: l.location, TypeId: l.typeId || 2,
+                           PowerSupplyId: l.powerSupplyId || null, RfCluster: rf });
+        }
+
+        // ── SURVEY stage checklist ─────────────────────────────────────────────────
+        function loadSurveyChecklist(siteId) {
+            $('#surveyList').html('<div style="color:var(--txm);font-size:11px">Loading…</div>');
+            $.ajax({
+                url: '@Url.Action("GetSurveyChecklist", "Station")',
+                data: { siteId: siteId },
+                success: function (res) {
+                    if (!res || res.error) { $('#surveyList').html('<div style="color:var(--err);font-size:11px">' + ((res && res.error) || 'Failed to load') + '</div>'); return; }
+                    renderSurveyChecklist(siteId, res);
+                },
+                error: function () { $('#surveyList').html('<div style="color:var(--err);font-size:11px">Request failed</div>'); }
+            });
+        }
+
+        function renderSurveyChecklist(siteId, s) {
+            var html = '';
+            (s.items || []).forEach(function (it) {
+                html += '<label style="display:flex;align-items:flex-start;gap:8px;padding:4px 0;cursor:pointer;margin:0">'
+                      +   '<input type="checkbox" style="margin-top:2px" ' + (it.done ? 'checked' : '')
+                      +     ' onchange="saveSurveyItem(' + siteId + ',' + it.itemNo + ',this)">'
+                      +   '<span><b style="color:var(--txm)">' + it.itemNo + '.</b> ' + $('<div>').text(it.title).html()
+                      +     (it.done && it.doneOn ? ' <span style="font-size:10px;color:var(--ok)">✓ ' + it.doneOn + '</span>' : '')
+                      +   '</span>'
+                      + '</label>';
+            });
+            $('#surveyList').html(html);
+            $('#surveyProgress').text(s.doneCount + ' / ' + s.total);
+            $('#surveyBar').css('width', (s.total ? Math.round(100 * s.doneCount / s.total) : 0) + '%');
+            $('#surveyStageBadge')
+                .text(s.stageCompleted ? 'Completed' + (s.completedOn ? ' · ' + s.completedOn : '') : 'In Progress')
+                .css({ background: s.stageCompleted ? 'var(--ok)' : 'var(--co-lt)', color: s.stageCompleted ? '#fff' : 'var(--co)' });
+        }
+
+        function saveSurveyItem(siteId, itemNo, chk) {
+            var $all = $('#surveyList input').prop('disabled', true);
+            $.ajax({
+                url: '@Url.Action("SaveSurveyChecklistItem", "Station")',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ SiteId: siteId, ItemNo: itemNo, Done: chk.checked }),
+                success: function (res) {
+                    if (!res || res.error) { alert((res && res.error) || 'Save failed'); chk.checked = !chk.checked; $all.prop('disabled', false); return; }
+                    renderSurveyChecklist(siteId, res);
+                },
+                error: function () { alert('Request failed'); chk.checked = !chk.checked; $all.prop('disabled', false); }
+            });
         }
 
         function bindStats(data) {
@@ -485,6 +999,9 @@
                     };
                 });
             }
+
+            // "N wired" counts on the Location tab come from these card lines
+            if (__locations.length) renderLocations();
 
             // Re-render sidebar only if site types are already loaded
             // (so counts update in-place without changing the type list)
@@ -547,11 +1064,62 @@
                 });
             });
         }
+        // 90 EditCardLineCircuit rule: name contains "ma", or Point Machine attribute with "-c" = current input
+        function isCurrentCardLine(r) {
+            var n = (r.attributeName || '').toLowerCase();
+            return n.indexOf('ma') >= 0 || (r.assetTypeId === 3 && n.indexOf('-c') >= 0);   // 3 = POINT_MACHINE
+        }
+
+        // Save Row / Terminal for one attribute row → CardLine (same API as 90 Yard Config)
         function svA(btn) {
             var row = btn.closest('.ar');
-            var name = row.querySelector('.aname').textContent;
-            btn.textContent = '✓'; btn.style.background = 'var(--ok)';
-            setTimeout(function() { btn.textContent = 'Save'; btn.style.background = ''; }, 1500);
+            var cardLineId = parseInt(row.getAttribute('data-cardline-id'), 10) || 0;
+            if (!cardLineId) { alert('This attribute has no card line yet. Set it up in Yard Config on the 90 site first.'); return; }
+
+            var inputs = row.querySelectorAll('.rt-inp');
+            var isCur  = row.getAttribute('data-current') === '1';
+            var rowNo  = inputs[0] ? inputs[0].value.trim() : '';
+            function num(i, label) {
+                var t = inputs[i] ? inputs[i].value.trim() : '';
+                if (t === '') return null;
+                var n = parseInt(t, 10);
+                if (isNaN(n)) throw label + ' must be a number';
+                return n;
+            }
+            var trm, third;
+            try { trm = num(1, 'Terminal +'); third = num(2, isCur ? 'Sequence no.' : 'Terminal -'); }
+            catch (msg) { alert(msg); return; }
+
+            var body = { Id: cardLineId, RowNumber: rowNo, TerminalNumberPositive: trm };
+            if (isCur) body.CurrentSequenceNumber = third; else body.TerminalNumberNegative = third;
+
+            btn.disabled = true; btn.textContent = '…';
+            $.ajax({
+                url: '@Url.Action("UpdateCardLineLocation", "Station")',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(body),
+                success: function (res) {
+                    if (res && res.success) {
+                        // keep the in-memory CardLine list in step so re-rendering shows saved values
+                        __cardLines.forEach(function (r) {
+                            if (r.id === cardLineId) {
+                                r.rowNumber = res.rowNumber;
+                                r.terminalNumberPositive = res.terminalNumberPositive;
+                                r.terminalNumberNegative = res.terminalNumberNegative;
+                                r.currentSequenceNumber = res.currentSequenceNumber;
+                            }
+                        });
+                        btn.textContent = '✓'; btn.style.background = 'var(--ok)';
+                        setTimeout(function () { btn.textContent = 'Save'; btn.style.background = ''; }, 1500);
+                    } else {
+                        alert(res && res.error ? res.error : 'Save failed');
+                        btn.textContent = 'Save';
+                    }
+                },
+                error: function () { alert('Request failed'); btn.textContent = 'Save'; },
+                complete: function () { btn.disabled = false; }
+            });
         }
         function selTrack(el, name) {
             document.querySelectorAll('.air,.fot-parent,.fot-child').forEach(function(x) { x.classList.remove('sel'); });
@@ -609,6 +1177,8 @@
         var __currentSiteId      = 0;
         var __cardLineTypeCounts = {};
         var __cardLines          = [];
+        var __siteAssets         = [];      // all assets of the station (Asset API)
+        var __siteAssetsLoaded   = false;
         var __savedTypeIdsBySite = {};   // { siteId: [typeId, typeId, ...] } — cleared on refresh
         var __savedTypeNamesBySite = {};
 
@@ -702,7 +1272,7 @@
                 var id     = typeId(t);
                 var name   = typeName(t);
                 var clInfo = __cardLineTypeCounts[id];
-                var count  = clInfo ? clInfo.count : typeCount(t);
+                var count  = __siteAssetsLoaded ? siteAssetCount(id) : (clInfo ? clInfo.count : typeCount(t));
                 var unver  = typeUnver(t);
 
                 totalAssets += count;
@@ -721,7 +1291,7 @@
             var first     = toShow[0];
             var firstId   = typeId(first);
             var firstInfo = __cardLineTypeCounts[firstId];
-            var firstCount = firstInfo ? firstInfo.count : typeCount(first);
+            var firstCount = __siteAssetsLoaded ? siteAssetCount(firstId) : (firstInfo ? firstInfo.count : typeCount(first));
             $('#adTitle').text(typeName(first));
             $('.adp-h span:last-child').text(firstCount + ' assets');
 
@@ -776,9 +1346,31 @@
             });
             $box.html(html);
         });
+        // ── All assets of the station from the Asset API (Asset/GetAll, like the 90 Sites page) ──
+        // CardLine only knows assets that are wired on a card, so newly added assets would not show.
+        function loadSiteAssets(siteId, done) {
+            $.ajax({
+                url: '@Url.Action("GetSiteAssets", "Station")',
+                data: { siteId: siteId },
+                success: function (res) {
+                    if (siteId != __currentSiteId) return;   // station changed meanwhile
+                    __siteAssets = Array.isArray(res) ? res : [];
+                    __siteAssetsLoaded = Array.isArray(res);
+                    if (done) done();
+                }
+            });
+        }
+
+        function siteAssetCount(assetTypeId) {
+            return __siteAssets.filter(function (a) { return a.assetTypeId === assetTypeId; }).length;
+        }
+
                         function loadAssetsForType(assetTypeId, assetTypeName) {
-            // Unique assets of this type from CardLine
+            // Assets of this type: Asset API first, plus any only known from CardLine
             var map = {};
+            __siteAssets.forEach(function (a) {
+                if (a.assetTypeId === assetTypeId) map[a.id] = { id: a.id, name: a.name || ('Asset ' + a.id), inactive: a.isActive === false };
+            });
             __cardLines.forEach(function (r) {
                 if (r.assetTypeId === assetTypeId && r.assetId) {
                     if (!map[r.assetId]) {
@@ -812,7 +1404,9 @@
                 var sel = (i === 0) ? ' sel' : '';
                 html += '<div class="air' + sel + '" data-asset-id="' + a.id + '" '
                       +     'onclick="selectAsset(this, ' + a.id + ')">'
-                      +     (a.name || '') + '</div>';
+                      +     $('<div>').text(a.name || '').html()
+                      +     (a.inactive ? ' <span style="font-size:9px;color:var(--txl)">(inactive)</span>' : '')
+                      + '</div>';
             });
             $list.html(html);
 
@@ -823,7 +1417,8 @@
                 function loadAttributesForAsset(assetId) {
             var records = __cardLines.filter(function (r) { return r.assetId === assetId; });
             if (!records.length) {
-                $('#modeA').html('<div style="padding:16px;text-align:center;color:var(--txm);font-size:11px">No attributes</div>');
+                $('#modeA').html('<div style="padding:16px;text-align:center;color:var(--txm);font-size:11px">No card lines for this asset yet — '
+                    + 'Row / Terminal can be set once it is wired in Yard Config (90 site). Click the asset to edit its channels.</div>');
                 $('#modeB').html('');
                 return;
             }
@@ -856,12 +1451,18 @@
                     var attrName = r.attributeName || '';
                     var row      = r.rowNumber != null ? r.rowNumber : '';
                     var trm      = r.terminalNumberPositive != null ? r.terminalNumberPositive : '';
+                    // Voltage: Row, +ve, -ve terminal.  Current: Row, +ve terminal, sequence no. (90 rule)
+                    var isCur    = isCurrentCardLine(r);
+                    var third    = isCur
+                        ? (r.currentSequenceNumber != null ? r.currentSequenceNumber : '')
+                        : (r.terminalNumberNegative != null ? r.terminalNumberNegative : '');
 
-                    html += '<div class="ar" data-cardline-id="' + (r.id || '') + '">'
+                    html += '<div class="ar" data-cardline-id="' + (r.id || '') + '" data-current="' + (isCur ? 1 : 0) + '">'
                           +   '<input type="checkbox" checked data-g="' + grpKey + '">'
-                          +   '<span class="aname">' + attrName + '</span>'
+                          +   '<span class="aname">' + attrName + ' <span style="font-size:9px;color:var(--txl)">' + (isCur ? 'I' : 'V') + '</span></span>'
                           +   '<input class="rt-inp" placeholder="Row" value="' + row + '">'
-                          +   '<input class="rt-inp" placeholder="Trm" value="' + trm + '">'
+                          +   '<input class="rt-inp" placeholder="+ Trm" title="Terminal +" value="' + trm + '">'
+                          +   '<input class="rt-inp" placeholder="' + (isCur ? 'Seq' : '- Trm') + '" title="' + (isCur ? 'Current sequence no.' : 'Terminal -') + '" value="' + third + '">'
                           +   '<button class="sv-btn" onclick="svA(this)">Save</button>'
                           + '</div>';
                 });
@@ -906,6 +1507,10 @@
             $('#assetModalHttp').val('');
             $('#assetModalCells').val('');
             $('#assetModalActive').prop('checked', true);
+            // Point Machine section (AssetType 3) — reset to Full / Parallel
+            $('#assetModalPM').toggle(__modalAssetTypeId === 3);
+            $('#pmHalf, #pmSeries, #pmTws').val('0'); $('#pmSeriesType').val('1'); $('#pmAliasA, #pmAliasB').val('');
+            pmToggle();
 
             // Show loading spinner in config table
             $('#assetConfigBody').html(
@@ -914,20 +1519,44 @@
               + '</td></tr>'
             );
 
-            var modal = new bootstrap.Modal(document.getElementById('addAssetModal'));
+            // Always open on the Config tab with the other tabs cleared
+            bootstrap.Tab.getOrCreateInstance(document.querySelector('#assetModalTabs [data-bs-target="#amConfig"]')).show();
+            $('#amSignalMapTab').hide();
+            $('#amSignalMapBody, #amAlertsBody, #amFRSBody, #amCauseBody').empty();
+
+            var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('addAssetModal'));
             modal.show();
 
-            // Call GetAssetTypeInfo — same as old site's AddAsset controller action
-            // Returns Asset with MQTTNoOfChannels + assetAttributes (pre-filled if edit)
+            // New asset → GetAssetTypeInfo (blank attributes, like the 90 AddAsset action).
+            // Edit → GetAssetJson (attributes pre-filled with the saved channel/value, like 90 GetAssetById).
+            var req = assetId
+                ? { url: '@Url.Action("GetAssetJson", "Station")', data: { id: assetId } }
+                : { url: '@Url.Action("GetAssetTypeInfo", "Station")', data: { assetTypeId: __modalAssetTypeId, siteId: __currentSiteId } };
             $.ajax({
-                url: '@Url.Action("GetAssetTypeInfo", "Station")',
-                data: { assetTypeId: __modalAssetTypeId, siteId: __currentSiteId },
+                url: req.url,
+                data: req.data,
                 success: function (asset) {
                     if (asset && !asset.error) {
+                        if (assetId) {
+                            $('#assetModalName').val(asset.name || assetName || '');
+                            $('#assetModalHttp').val(asset.httpMisLink || '');
+                            $('#assetModalCells').val(asset.numberOfCell != null ? asset.numberOfCell : '');
+                            $('#assetModalActive').prop('checked', asset.isActive !== false);
+                            $('#pmHalf').val(asset.isHalfPointMachine ? '1' : '0');
+                            $('#pmSeries').val(asset.isSeriesOpration ? '1' : '0');
+                            $('#pmSeriesType').val(String(asset.seriesOprationTypeId || 1));
+                            $('#pmAliasA').val(asset.aliasDirectionA || '');
+                            $('#pmAliasB').val(asset.aliasDirectionB || '');
+                            // IRS/TWS = Asset.IsThickWave + ThickWaveTypeId (A=1, B=2, Both=3), as on 90
+                            $('#pmTws').val(asset.isThickWave ? String(asset.thickWaveTypeId || 3) : '0');
+                            pmToggle();
+                        }
                         __modalAsset    = asset;
-                        __modalChannels = asset.mQTTNoOfChannels || 6;
+                        // Json() camelCases MQTTNoOfChannels as "mqttNoOfChannels"
+                        __modalChannels = asset.mqttNoOfChannels || asset.MQTTNoOfChannels || 6;
                         __modalAttributes = asset.assetAttributes || [];
                         renderAssetConfigTable();
+                        renderAssetExtraTabs(asset, !!assetId);
                     } else {
                         $('#assetConfigBody').html('<tr><td colspan="4" style="text-align:center;color:var(--err)">Failed to load attributes</td></tr>');
                     }
@@ -938,6 +1567,124 @@
             });
         }
         // ── Render Config tab rows from __modalAttributes ─────────────────────
+        function pmToggle() { $('#assetModalPM .pm-series').toggle($('#pmSeries').val() === '1'); }
+
+        // ── Signal Mapping / Alerts / FRS Alerts / Cause Code tabs (same data as the 90 Add Asset) ──
+        function amEsc(v) { return (v === null || v === undefined) ? '' : String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+        function renderAssetExtraTabs(asset, isEdit) {
+            // Signal Mapping — the API only fills this list for Track assets
+            var maps = asset.mSignalTrackMappings || [];
+            if (maps.length) {
+                var sm = '';
+                maps.forEach(function (m) {
+                    sm += '<tr><td><label style="display:flex;align-items:center;gap:8px;margin:0;cursor:pointer">'
+                        + '<input type="checkbox" class="am-sig" data-asset-id="' + m.assetId + '"' + (m.isChecked ? ' checked' : '') + '> '
+                        + amEsc(m.assetName) + '</label></td></tr>';
+                });
+                $('#amSignalMapBody').html(sm);
+                $('#amSignalMapTab').show();
+            }
+
+            // Alerts — checkbox = active, operator + value; saved only when both are set
+            var ops = asset.mOperators || [];
+            var alerts = asset.mAlerts || [];
+            var al = '';
+            alerts.forEach(function (a) {
+                var opts = '<option value="">Select Operator</option>';
+                ops.forEach(function (o) {
+                    opts += '<option value="' + o.id + '"' + (o.id === a.operatorId ? ' selected' : '') + '>' + amEsc(o.value) + '</option>';
+                });
+                al += '<tr class="am-alert" data-id="' + a.id + '" data-value-id="' + (a.alertValueId || 0) + '">'
+                    + '<td><input type="checkbox" class="am-alert-on"' + (a.isActive ? ' checked' : '') + '></td>'
+                    + '<td style="vertical-align:middle">' + amEsc(a.alertName) + '</td>'
+                    + '<td><select class="form-select form-select-sm am-alert-op">' + opts + '</select></td>'
+                    + '<td><input type="text" class="form-control form-control-sm am-alert-val" value="' + amEsc(a.alertValue) + '"></td>'
+                    + '</tr>';
+            });
+            $('#amAlertsBody').html(al || '<tr><td colspan="4" style="text-align:center;color:var(--txm);padding:16px">No alerts for this asset type</td></tr>');
+
+            // FRS Alerts — one row per attribute
+            var ranges = asset.mFRSAttributeRanges || [];
+            var fr = '';
+            (__modalAttributes || []).forEach(function (attr) {
+                var r = ranges.filter(function (x) { return x.assetAttributeId === attr.id; })[0] || {};
+                fr += '<tr class="am-frs" data-attr-id="' + attr.id + '">'
+                    + '<td style="vertical-align:middle">' + amEsc(attr.title || attr.name) + '</td>'
+                    + '<td><input type="text" class="form-control form-control-sm am-frs-maxsafe" value="' + amEsc(r.maxSafeValue) + '"></td>'
+                    + '<td><input type="text" class="form-control form-control-sm am-frs-avg" value="' + amEsc(r.averageValue) + '"></td>'
+                    + '<td><input type="text" class="form-control form-control-sm am-frs-minsafe" value="' + amEsc(r.minSafeValue) + '"></td>'
+                    + '<td><input type="text" class="form-control form-control-sm am-frs-minfail" value="' + amEsc(r.minFailValue) + '"></td>'
+                    + '</tr>';
+            });
+            $('#amFRSBody').html(fr || '<tr><td colspan="5" style="text-align:center;color:var(--txm);padding:16px">No attributes</td></tr>');
+
+            // Cause Code Activation — new asset: all active (as on 90); edit: saved state
+            var infos = asset.mAlertInfos || [];
+            var cc = '';
+            infos.forEach(function (i) {
+                var on = isEdit ? i.isActive : true;
+                cc += '<tr class="am-cause" data-id="' + i.id + '">'
+                    + '<td style="vertical-align:middle">' + amEsc(i.name) + '</td>'
+                    + '<td style="text-align:center"><input type="checkbox" class="am-cause-on"' + (on ? ' checked' : '') + '></td>'
+                    + '</tr>';
+            });
+            $('#amCauseBody').html(cc || '<tr><td colspan="2" style="text-align:center;color:var(--txm);padding:16px">No cause codes for this asset type</td></tr>');
+        }
+
+        function amNum(v) { v = (v || '').trim(); if (v === '') return null; var n = parseFloat(v); return isNaN(n) ? null : n; }
+
+        // Collect the extra tabs in the same shape the 90 site sends to Asset/SaveAsset
+        function collectAssetExtraTabs() {
+            var mAlerts = [];
+            $('#amAlertsBody tr.am-alert').each(function () {
+                var $r = $(this);
+                mAlerts.push({
+                    Id:            parseInt($r.data('id'), 10),
+                    AlertValueId:  parseInt($r.data('value-id'), 10) || 0,
+                    IsActive:      $r.find('.am-alert-on').is(':checked'),
+                    AlertName:     $r.find('td').eq(1).text(),
+                    OperatorId:    parseInt($r.find('.am-alert-op').val(), 10) || 0,
+                    AlertValue:    $r.find('.am-alert-val').val().trim()
+                });
+            });
+
+            var mFRSAttributeRanges = [];
+            $('#amFRSBody tr.am-frs').each(function () {
+                var $r = $(this);
+                var item = {
+                    AssetAttributeId: parseInt($r.data('attr-id'), 10),
+                    MaxSafeValue:     amNum($r.find('.am-frs-maxsafe').val()),
+                    AverageValue:     amNum($r.find('.am-frs-avg').val()),
+                    MinSafeValue:     amNum($r.find('.am-frs-minsafe').val()),
+                    MinFailValue:     amNum($r.find('.am-frs-minfail').val())
+                };
+                // like 90: skip rows with all four values empty
+                if (item.MaxSafeValue !== null || item.AverageValue !== null || item.MinSafeValue !== null || item.MinFailValue !== null)
+                    mFRSAttributeRanges.push(item);
+            });
+
+            var mAlertInfoActivations = [];
+            $('#amCauseBody tr.am-cause').each(function () {
+                mAlertInfoActivations.push({
+                    AlertInfoId: parseInt($(this).data('id'), 10),
+                    IsActive:    $(this).find('.am-cause-on').is(':checked')
+                });
+            });
+
+            var mSignalTrackMappings = [];
+            $('#amSignalMapBody .am-sig:checked').each(function () {
+                mSignalTrackMappings.push({ SignalAssetId: parseInt($(this).data('asset-id'), 10) });
+            });
+
+            return {
+                mAlerts: mAlerts,
+                mFRSAttributeRanges: mFRSAttributeRanges,
+                mAlertInfoActivations: mAlertInfoActivations,
+                mSignalTrackMappings: mSignalTrackMappings
+            };
+        }
+
         function renderAssetConfigTable() {
             var $body = $('#assetConfigBody');
             if (!__modalAttributes || !__modalAttributes.length) {
@@ -956,7 +1703,7 @@
                 var chanOpts = '<option value="">Select Channel</option>';
                 for (var i = 1; i <= __modalChannels; i++) {
                     var chVal = 'Channel' + i;
-                    chanOpts += '<option value="' + chVal + '"' + (selChan === chVal ? ' selected' : '') + '>Channel ' + i + '</option>';
+                    chanOpts += '<option value="' + chVal + '"' + (String(selChan).toLowerCase() === chVal.toLowerCase() ? ' selected' : '') + '>Channel ' + i + '</option>';
                 }
 
                 html += '<tr>'
@@ -975,17 +1722,26 @@
 
             // Build mAssetInfos — same structure as old site's fnSaveAsset
             var mAssetInfos = [];
+            var skipped = [];
             (__modalAttributes || []).forEach(function (attr) {
                 var channel = $('.cfg-channel[data-attr-id="' + attr.id + '"]').val();
                 var value   = $('.cfg-value[data-attr-id="'   + attr.id + '"]').val().trim();
                 var mult    = $('.cfg-mult[data-attr-id="'    + attr.id + '"]').val().trim();
+                // API Asset/SaveAsset only creates an AssetInfo row when Value is filled;
+                // isSuccess = the API already has a row for this attribute (then a channel-only change is saved)
+                if (channel && !value && !attr.isSuccess) skipped.push(attr.title || attr.name || ('Attr ' + attr.id));
                 mAssetInfos.push({
                     AssetAttributeId: attr.id,
-                    Channel:          channel || '',
+                    Channels:         channel || '',   // API/AssetInfo field is "Channels"
                     Value:            value,
                     Multiplication:   mult ? parseFloat(mult) : null
                 });
             });
+            if (skipped.length && !confirm(
+                    'These attributes have a channel but no Value, so the API will NOT save them:\n\n- '
+                    + skipped.join('\n- ') + '\n\nEnter a Value for them to save the channel. Save the rest anyway?')) {
+                return;
+            }
 
             var payload = {
                 Id:           __modalAssetId || 0,
@@ -997,6 +1753,20 @@
                 IsActive:     $('#assetModalActive').is(':checked'),
                 mAssetInfos:  mAssetInfos
             };
+            $.extend(payload, collectAssetExtraTabs());
+
+            // Point Machine details — same rules as 90 SiteList.js: series type and A/B-end names only when Series
+            if (__modalAssetTypeId === 3) {
+                var isSeries = $('#pmSeries').val() === '1';
+                payload.IsHalfPointMachine   = $('#pmHalf').val() === '1';
+                payload.IsSeriesOpration     = isSeries;
+                payload.SeriesOprationTypeId = isSeries ? parseInt($('#pmSeriesType').val(), 10) : null;
+                payload.AliasDirectionA      = isSeries ? $('#pmAliasA').val().trim() : null;
+                payload.AliasDirectionB      = isSeries ? $('#pmAliasB').val().trim() : null;
+                var tws = parseInt($('#pmTws').val(), 10) || 0;   // 0 = IRS
+                payload.IsThickWave          = tws > 0;
+                payload.ThickWaveTypeId      = tws > 0 ? tws : null;
+            }
 
             var $saveBtn = $('#addAssetModal .be7');
             $saveBtn.prop('disabled', true).text('Saving…');
@@ -1012,7 +1782,13 @@
                         setTimeout(function () {
                             bootstrap.Modal.getInstance(document.getElementById('addAssetModal')).hide();
                             $saveBtn.prop('disabled', false).text('Save');
-                            loadAssetsForType(__modalAssetTypeId, __modalAssetTypeName);
+                            // Re-read the station's assets so a new asset appears straight away
+                            loadSiteAssets(__currentSiteId, function () {
+                                var n = siteAssetCount(__modalAssetTypeId);
+                                $('#atList .ati[data-type-id="' + __modalAssetTypeId + '"] .ac').text(n);
+                                $('.adp-h span:last-child').text(n + ' assets');
+                                loadAssetsForType(__modalAssetTypeId, __modalAssetTypeName);
+                            });
                         }, 900);
                     } else {
                         alert(res && res.error ? res.error : 'Error saving asset.');

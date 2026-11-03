@@ -20,6 +20,7 @@ builder.Services.AddScoped<ISiteService, SiteService>();
 builder.Services.AddScoped<IZoneService, ZoneService>();
 builder.Services.AddScoped<IDivisionService, DivisionService>();
 builder.Services.AddScoped<IAssetTypeService, AssetTypeService>();
+builder.Services.AddScoped<ISectionService, SectionService>();
 
 
 var app = builder.Build();

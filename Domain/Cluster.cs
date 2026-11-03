@@ -23,6 +23,12 @@ namespace Domain
 
         //Extra
         public int? ModemVersion { get; set; }
+        public int TypeId { get; set; }            // 1 = Indoor, 2 = OutDoor
+        public string Port { get; set; }
+        public bool TcpEnabled { get; set; }
+        public bool OFCPolling { get; set; }
+        public bool OFCTimesync { get; set; }
+        public string WireguardIP { get; set; }
         public string AttributeName { get; set; }
         public string CardName { get; set; }
         public string ADC { get; set; }

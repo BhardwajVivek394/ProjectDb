@@ -242,7 +242,7 @@
     <a href="#" class="e7-lnk">Reports</a>
   </div>
   <div class="e7-right">
-    <button class="be7" data-bs-toggle="modal" data-bs-target="#newStationModal">
+    <button class="be7" onclick="openStationModal(0)">
       <i class="bi bi-plus-lg me-1"></i>New Station
     </button>
     <div class="dropdown">
@@ -262,72 +262,168 @@
 <!-- Page body -->
 @RenderBody()
 
-<!-- ═══ NEW STATION MODAL ═══ -->
-    <!-- ═══ NEW STATION MODAL ═══ -->
+    <!-- ═══ STATION MODAL (create + edit, same fields as the 90 Edit Site page) ═══ -->
+    <style>
+        .ns-sec{font-size:10px;font-weight:700;color:var(--co);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bd);padding-bottom:4px;margin:6px 0 2px}
+        .ns-flags{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px 16px}
+        .ns-flags label,.ns-chk{display:flex;align-items:center;gap:6px;font-weight:500!important;color:var(--tx)!important;margin:0!important;cursor:pointer}
+        .ns-note{font-size:11px;color:var(--txm);background:var(--co-lt);border:1px solid var(--bd);border-radius:5px;padding:6px 10px}
+    </style>
     <div class="modal fade" id="newStationModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-building me-2" style="color:var(--co)"></i>New Station</h5>
+                    <h5 class="modal-title"><i class="bi bi-building me-2" style="color:var(--co)"></i><span id="nsTitle">New Station</span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="nsId" value="0" />
 
                     <div class="row g-3">
-                        <div class="col-6">
+                        <!-- Station -->
+                        <div class="col-12"><div class="ns-sec">Station</div></div>
+                        <div class="col-md-4">
                             <label>Zone <span class="text-danger">*</span></label>
                             <select class="form-select" id="nsZone"></select>
                         </div>
-                        <div class="col-6">
+                        <div class="col-md-4">
                             <label>Division <span class="text-danger">*</span></label>
                             <select class="form-select" id="nsDivision"></select>
                         </div>
-
-                        <div class="col-12">
+                        <div class="col-md-4">
+                            <label>Section</label>
+                            <select class="form-select" id="nsSection"></select>
+                        </div>
+                        <div class="col-md-8">
                             <label>Station Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="nsName" placeholder="e.g. Palwal">
                         </div>
-
+                        <div class="col-md-4">
+                            <label>Station Code</label>
+                            <input type="text" class="form-control" id="nsStationCode">
+                        </div>
                         <div class="col-12">
                             <label>Description</label>
                             <textarea class="form-control" id="nsDesc" rows="2"></textarea>
                         </div>
 
-                        <div class="col-6">
+                        <!-- MQTT -->
+                        <div class="col-12"><div class="ns-sec">MQTT</div></div>
+                        <div class="col-md-5">
                             <label>MQTT Base Path <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="nsMQTTBase">
                         </div>
-                        <div class="col-3">
-                            <label>MQTT Channels <span class="text-danger">*</span></label>
+                        <div class="col-md-2">
+                            <label>MQTT No. of Channels <span class="text-danger">*</span></label>
                             <input type="number" class="form-control" id="nsMQTTChannels" value="0">
                         </div>
-                        <div class="col-3">
+                        <div class="col-md-2">
                             <label>MQTT Active Threshold <span class="text-danger">*</span></label>
                             <input type="number" class="form-control" id="nsMQTTActive" value="0">
                         </div>
-
-                        <div class="col-12">
+                        <div class="col-md-3">
                             <label>Mac Id <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="nsMACId">
                         </div>
 
-                        <div class="col-12" style="display:flex;gap:16px;flex-wrap:wrap">
-                            <label style="display:flex;align-items:center;gap:6px;font-weight:500">
-                                <input type="checkbox" id="nsIsActive" checked> Is Active
+                        <!-- Communication -->
+                        <div class="col-12"><div class="ns-sec">Communication</div></div>
+                        <div class="col-md-3">
+                            <label>Router Id</label>
+                            <input type="text" class="form-control" id="nsRouterId">
+                        </div>
+                        <div class="col-md-3">
+                            <label>Mobile Number</label>
+                            <input type="number" class="form-control" id="nsMobileNumber">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Modem Type</label>
+                            <select class="form-select" id="nsModemType">
+                                <option value="">Select</option>
+                                <option value="1">Single</option>
+                                <option value="2">Dual</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2" id="nsSingleModamWrap" style="display:none">
+                            <label>Single Modem Type</label>
+                            <select class="form-select" id="nsSingleModamType">
+                                <option value="">Select</option>
+                                <option value="1">Complete</option>
+                                <option value="2">Partial</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label>Server Type</label>
+                            <select class="form-select" id="nsServerType">
+                                <option value="">Select</option>
+                                <option value="1">Server A</option>
+                                <option value="2">Server B</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label>PLC Log</label>
+                            <select class="form-select" id="nsPLCLogId">
+                                <option value="0">Select</option>
+                                <option value="1">FTP</option>
+                                <option value="2">HTTP</option>
+                            </select>
+                        </div>
+
+                        <!-- SMS & Reboot -->
+                        <div class="col-12"><div class="ns-sec">SMS &amp; Reboot</div></div>
+                        <div class="col-md-2">
+                            <label>Sms Frequency</label>
+                            <input type="number" class="form-control" id="nsSmsFrequency">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Sms Limit</label>
+                            <input type="number" class="form-control" id="nsSmsLimit">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Charger Delay (Min)</label>
+                            <input type="number" class="form-control" id="nsChargerDelay">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Reboot Total</label>
+                            <input type="number" class="form-control" id="nsRebootTotal">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Reboot Day</label>
+                            <input type="number" class="form-control" id="nsRebootDay">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Reboot Daynum</label>
+                            <input type="number" class="form-control" id="nsRebootDaynum">
+                        </div>
+
+                        <!-- Data Logger -->
+                        <div class="col-12"><div class="ns-sec">Data Logger</div></div>
+                        <div class="col-12" style="display:flex;gap:24px;flex-wrap:wrap;align-items:center">
+                            <label class="ns-chk"><input type="checkbox" id="nsIsDataLogger"> Is Data Logger</label>
+                            <span id="nsDLVersionWrap" style="display:none;gap:16px;align-items:center">
+                                <label class="ns-chk"><input type="radio" name="nsDLVersion" value="1" checked> Ver1 (Request)</label>
+                                <label class="ns-chk"><input type="radio" name="nsDLVersion" value="2"> Ver2 (Broadcast)</label>
+                            </span>
+                            <label class="ns-chk"><input type="checkbox" id="nsIsDataLoggerJsonReverse"> Is Data Logger Json Reverse</label>
+                        </div>
+
+                        <!-- Flags -->
+                        <div class="col-12"><div class="ns-sec">Options</div></div>
+                        <div class="col-12"><div class="ns-flags" id="nsFlags"></div></div>
+
+                        <!-- Project status (edit only) -->
+                        <div class="col-12" id="nsProjectWrap" style="display:none">
+                            <div class="ns-sec">Project</div>
+                            <label class="ns-chk" style="margin-top:8px!important">
+                                <input type="checkbox" id="nsProjectCompleted"> Project Completed
                             </label>
-                            <label style="display:flex;align-items:center;gap:6px;font-weight:500">
-                                <input type="checkbox" id="nsIsSetupLocalSite"> Is Setup Local Site
-                            </label>
-                            <label style="display:flex;align-items:center;gap:6px;font-weight:500">
-                                <input type="checkbox" id="nsIsEIEnable"> Is EI Enable
-                            </label>
-                            <label style="display:flex;align-items:center;gap:6px;font-weight:500">
-                                <input type="checkbox" id="nsIsUnderDev"> Is Under Development
-                            </label>
-                            <label style="display:flex;align-items:center;gap:6px;font-weight:500;color:var(--co)">
-                                <input type="checkbox" id="nsIsProject" checked> Is Project
-                            </label>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="ns-note" id="nsProjectNote">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Every station saved from Station Survey is saved with <b>Is Project = true</b>.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -340,87 +436,245 @@
     </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // ── Load zones when modal opens ────────────────────────────────────────
-        document.getElementById('newStationModal').addEventListener('show.bs.modal', function () {
+        // Checkbox options, in the same order as the 90 Edit Site page.
+        // key = Site property name sent to the API.
+        var NS_FLAGS = [
+            { key: 'IsActive',                     label: 'Is Active',                        def: true },
+            { key: 'IsSetupLocalSite',             label: 'Is Setup Local Site' },
+            { key: 'IsHttpPost',                   label: 'Is Http Post' },
+            { key: 'IsEIEnable',                   label: 'Is EI Enable' },
+            { key: 'IsTest',                       label: 'Is Test' },
+            { key: 'IsNoneRE',                     label: 'Is None RE' },
+            { key: 'IsUnderDevlopment',            label: 'Is Under Development' },
+            { key: 'IsAnalytics',                  label: 'Is Analytics' },
+            { key: 'IsTestUser',                   label: 'Is Test User' },
+            { key: 'IsEarthFaultPushNotification', label: 'Is Earth Fault Push Notification' },
+            { key: 'IsCuttingRelayVoltage',        label: 'Is Cutting Relay Voltage' },
+            { key: 'IsSummary',                    label: 'Is Summary' },
+            { key: 'IsSeriesOpration',             label: 'Is Series Operation' },
+            { key: 'IsPointDetection50v',          label: 'Is Point Detection 50v' },
+            { key: 'IsCombinePointMachine',        label: 'Is Combine Point Machine' },
+            { key: 'IsFRSAlert',                   label: 'Is FRS Alert' },
+            { key: 'IsSiemensPoint',               label: 'Is Siemens Point' }
+        ];
+
+        // Text/number/select inputs: element id → Site property name
+        var NS_FIELDS = {
+            nsName: 'Name', nsStationCode: 'StationCode', nsDesc: 'Description',
+            nsMQTTBase: 'MQTTBasePath', nsMQTTChannels: 'MQTTNoOfChannels', nsMQTTActive: 'MQTTActiveChannel',
+            nsMACId: 'MACId', nsRouterId: 'RouterId', nsMobileNumber: 'MobileNumber',
+            nsModemType: 'ModemType', nsSingleModamType: 'SingleModamType', nsServerType: 'ServerType',
+            nsPLCLogId: 'PLCLogId', nsSmsFrequency: 'SmsFrequency', nsSmsLimit: 'SmsLimit',
+            nsChargerDelay: 'ChargerDelay', nsRebootTotal: 'RebootTotal', nsRebootDay: 'RebootDay',
+            nsRebootDaynum: 'RebootDaynum'
+        };
+
+        (function renderFlags() {
+            var html = '';
+            NS_FLAGS.forEach(function (f) {
+                html += '<label><input type="checkbox" id="nsFlag_' + f.key + '"> ' + f.label + '</label>';
+            });
+            document.getElementById('nsFlags').innerHTML = html;
+        })();
+
+        function nsEl(id) { return document.getElementById(id); }
+
+        // JSON from the controller is camelCase ("mqttBasePath"); read it case-insensitively.
+        function nsPick(obj, key) {
+            if (!obj) return null;
+            var lk = key.toLowerCase();
+            for (var k in obj) { if (k.toLowerCase() === lk) return obj[k]; }
+            return null;
+        }
+        function nsIntOrNull(v) {
+            if (v === null || v === undefined || String(v).trim() === '') return null;
+            var n = parseInt(v, 10);
+            return isNaN(n) ? null : n;
+        }
+
+        function nsToggleDependents() {
+            nsEl('nsSingleModamWrap').style.display = nsEl('nsModemType').value === '1' ? '' : 'none';
+            nsEl('nsDLVersionWrap').style.display   = nsEl('nsIsDataLogger').checked ? 'inline-flex' : 'none';
+
+            var isEdit = (parseInt(nsEl('nsId').value, 10) || 0) > 0;
+            nsEl('nsProjectWrap').style.display = isEdit ? '' : 'none';
+            nsEl('nsProjectNote').innerHTML = '<i class="bi bi-info-circle me-1"></i>' + (
+                !isEdit
+                    ? 'Every station created from Station Survey is saved with <b>Is Project = true</b>.'
+                    : nsEl('nsProjectCompleted').checked
+                        ? 'Project is completed — this station will be saved with <b>Is Project = false</b>.'
+                        : 'Project is in progress — this station will be saved with <b>Is Project = true</b>.');
+        }
+        nsEl('nsModemType').addEventListener('change', nsToggleDependents);
+        nsEl('nsIsDataLogger').addEventListener('change', nsToggleDependents);
+        nsEl('nsProjectCompleted').addEventListener('change', nsToggleDependents);
+
+        // ── Open for create (siteId = 0) or edit (siteId > 0) ─────────────────
+        function openStationModal(siteId) {
+            siteId = parseInt(siteId, 10) || 0;
             resetNewStationForm();
-            loadModalZones();
-        });
+            nsEl('nsTitle').textContent = siteId > 0 ? 'Edit Station' : 'New Station';
+            nsEl('btnCreateStation').textContent = siteId > 0 ? 'Update Station' : 'Create Station';
+
+            var lookups = Promise.all([loadModalZones(), loadModalSections()]);
+
+            if (siteId === 0) {
+                bootstrap.Modal.getOrCreateInstance(nsEl('newStationModal')).show();
+                return;
+            }
+
+            Promise.all([lookups, fetch('/Station/GetSiteJson?id=' + siteId).then(function (r) { return r.json(); })])
+                .then(function (res) {
+                    var site = res[1];
+                    if (!site || site.error) { alert((site && site.error) || 'Could not load station'); return; }
+                    return fillStationForm(site).then(function () {
+                        bootstrap.Modal.getOrCreateInstance(nsEl('newStationModal')).show();
+                    });
+                })
+                .catch(function () { alert('Could not load station'); });
+        }
 
         function resetNewStationForm() {
-            document.getElementById('nsId').value = 0;
-            document.getElementById('nsName').value = '';
-            document.getElementById('nsDesc').value = '';
-            document.getElementById('nsMQTTBase').value = '';
-            document.getElementById('nsMQTTChannels').value = 0;
-            document.getElementById('nsMQTTActive').value = 0;
-            document.getElementById('nsMACId').value = '';
-            document.getElementById('nsIsActive').checked = true;
-            document.getElementById('nsIsSetupLocalSite').checked = false;
-            document.getElementById('nsIsEIEnable').checked = false;
-            document.getElementById('nsIsUnderDev').checked = false;
-            document.getElementById('nsIsProject').checked = true;   // default for this dashboard
+            nsEl('nsId').value = 0;
+            Object.keys(NS_FIELDS).forEach(function (id) { nsEl(id).value = ''; });
+            nsEl('nsMQTTChannels').value = 0;
+            nsEl('nsMQTTActive').value = 0;
+            nsEl('nsPLCLogId').value = '0';
+            nsEl('nsIsDataLogger').checked = false;
+            nsEl('nsIsDataLoggerJsonReverse').checked = false;
+            nsEl('nsProjectCompleted').checked = false;
+            document.querySelector('input[name="nsDLVersion"][value="1"]').checked = true;
+            NS_FLAGS.forEach(function (f) { nsEl('nsFlag_' + f.key).checked = !!f.def; });
+            nsEl('nsDivision').innerHTML = '<option value="0">Select Division</option>';
+            nsToggleDependents();
+        }
+
+        function fillStationForm(site) {
+            nsEl('nsId').value = nsPick(site, 'Id') || 0;
+            Object.keys(NS_FIELDS).forEach(function (id) {
+                var v = nsPick(site, NS_FIELDS[id]);
+                nsEl(id).value = (v === null || v === undefined) ? '' : v;
+            });
+            if (!nsEl('nsPLCLogId').value) nsEl('nsPLCLogId').value = '0';
+            NS_FLAGS.forEach(function (f) { nsEl('nsFlag_' + f.key).checked = nsPick(site, f.key) === true; });
+            nsEl('nsIsDataLogger').checked = nsPick(site, 'IsDatalogger') === true;
+            nsEl('nsIsDataLoggerJsonReverse').checked = nsPick(site, 'IsDataLoggerJsonReverse') === true;
+            // IsProject = false means the project was marked completed; null/true = still in progress
+            nsEl('nsProjectCompleted').checked = nsPick(site, 'IsProject') === false;
+            var dlv = nsPick(site, 'DataLoggerVersion');
+            var radio = document.querySelector('input[name="nsDLVersion"][value="' + dlv + '"]');
+            if (radio) radio.checked = true;
+            nsEl('nsSection').value = nsPick(site, 'SectionId') || '';
+            nsToggleDependents();
+
+            nsEl('nsZone').value = nsPick(site, 'ZoneId') || 0;
+            return loadModalDivisions(nsEl('nsZone').value).then(function () {
+                nsEl('nsDivision').value = nsPick(site, 'DivisionId') || 0;
+            });
         }
 
         function loadModalZones() {
-            fetch('/Station/GetZonesJson')
+            return fetch('/Station/GetZonesJson')
                 .then(r => r.json())
                 .then(data => {
-                    var dd = document.getElementById('nsZone');
+                    var dd = nsEl('nsZone');
                     dd.innerHTML = '<option value="0">Select Zone</option>';
-                    (data || []).forEach(function (z) {
+                    (Array.isArray(data) ? data : []).forEach(function (z) {
                         dd.innerHTML += '<option value="' + z.id + '">' + z.name + '</option>';
                     });
-                    document.getElementById('nsDivision').innerHTML = '<option value="0">Select Division</option>';
+                })
+                .catch(() => { /* ignore */ });
+        }
+
+        function loadModalSections() {
+            return fetch('/Station/GetSectionsJson')
+                .then(r => r.json())
+                .then(data => {
+                    var dd = nsEl('nsSection');
+                    dd.innerHTML = '<option value="">Select</option>';
+                    (Array.isArray(data) ? data : []).forEach(function (s) {
+                        dd.innerHTML += '<option value="' + s.id + '">' + s.name + '</option>';
+                    });
+                })
+                .catch(() => { /* ignore */ });
+        }
+
+        function loadModalDivisions(zoneId) {
+            var dd = nsEl('nsDivision');
+            dd.innerHTML = '<option value="0">Select Division</option>';
+            if (!zoneId || zoneId == 0) return Promise.resolve();
+
+            return fetch('/Station/GetDivisionByZoneId?zoneId=' + zoneId)
+                .then(r => r.json())
+                .then(data => {
+                    (Array.isArray(data) ? data : []).forEach(function (d) {
+                        dd.innerHTML += '<option value="' + d.id + '">' + d.name + '</option>';
+                    });
                 })
                 .catch(() => { /* ignore */ });
         }
 
         // ── Zone → Division cascade inside modal ───────────────────────────────
-        document.getElementById('nsZone').addEventListener('change', function () {
-            var zoneId = this.value;
-            var dd = document.getElementById('nsDivision');
-            dd.innerHTML = '<option value="0">Select Division</option>';
-            if (!zoneId || zoneId == 0) return;
-
-            fetch('/Station/GetDivisionByZoneId?zoneId=' + zoneId)
-                .then(r => r.json())
-                .then(data => {
-                    (data || []).forEach(function (d) {
-                        dd.innerHTML += '<option value="' + d.id + '">' + d.name + '</option>';
-                    });
-                });
+        nsEl('nsZone').addEventListener('change', function () {
+            loadModalDivisions(this.value);
         });
 
-        // ── Save ───────────────────────────────────────────────────────────────
+        // ── Save (same validation as the 90 Edit Site page) ───────────────────
         function saveNewStation() {
-            var zone  = parseInt(document.getElementById('nsZone').value, 10) || 0;
-            var divId = parseInt(document.getElementById('nsDivision').value, 10) || 0;
-            var name  = document.getElementById('nsName').value.trim();
-            var mqtt  = document.getElementById('nsMQTTBase').value.trim();
+            var zone     = parseInt(nsEl('nsZone').value, 10) || 0;
+            var divId    = parseInt(nsEl('nsDivision').value, 10) || 0;
+            var name     = nsEl('nsName').value.trim();
+            var mqtt     = nsEl('nsMQTTBase').value.trim();
+            var channels = nsEl('nsMQTTChannels').value.trim();
+            var active   = nsEl('nsMQTTActive').value.trim();
+            var macId    = nsEl('nsMACId').value.trim();
 
-            if (zone  === 0) { alert('Select Zone');          return; }
-            if (divId === 0) { alert('Select Division');      return; }
-            if (!name)       { alert('Enter Station Name');   return; }
-            if (!mqtt)       { alert('Enter MQTT Base Path'); return; }
+            if (zone  === 0)                        { alert('Select Zone');                              return; }
+            if (divId === 0)                        { alert('Select Division');                          return; }
+            if (!name)                              { alert('Enter Station Name');                       return; }
+            if (!mqtt)                              { alert('Enter MQTT Base Path');                     return; }
+            if (channels === '' || +channels < 0)   { alert('Enter valid MQTT No. of Channels');         return; }
+            if (active === '' || +active <= 0)      { alert('MQTT Active Threshold must be more than 0'); return; }
+            if (!macId)                             { alert('Enter Mac Id');                             return; }
+
+            var modemType = nsIntOrNull(nsEl('nsModemType').value);
+            var isDL      = nsEl('nsIsDataLogger').checked;
+            var plcLog    = nsIntOrNull(nsEl('nsPLCLogId').value);
 
             var payload = {
-                Id:                parseInt(document.getElementById('nsId').value, 10) || 0,
-                ZoneId:            zone,
-                DivisionId:        divId,
-                Name:              name,
-                Description:       document.getElementById('nsDesc').value,
-                MQTTBasePath:      mqtt,
-                MQTTNoOfChannels:  parseInt(document.getElementById('nsMQTTChannels').value, 10) || 0,
-                MQTTActiveChannel: parseInt(document.getElementById('nsMQTTActive').value, 10)   || 0,
-                MACId:             document.getElementById('nsMACId').value,
-                IsActive:          document.getElementById('nsIsActive').checked,
-                IsSetupLocalSite:  document.getElementById('nsIsSetupLocalSite').checked,
-                IsEIEnable:        document.getElementById('nsIsEIEnable').checked,
-                IsUnderDevlopment: document.getElementById('nsIsUnderDev').checked,
-                IsTestUser:         document.getElementById('nsIsProject').checked
+                Id:                      parseInt(nsEl('nsId').value, 10) || 0,
+                ZoneId:                  zone,
+                DivisionId:              divId,
+                SectionId:               nsIntOrNull(nsEl('nsSection').value),
+                Name:                    name,
+                StationCode:             nsEl('nsStationCode').value.trim(),
+                Description:             nsEl('nsDesc').value,
+                MQTTBasePath:            mqtt,
+                MQTTNoOfChannels:        parseInt(channels, 10) || 0,
+                MQTTActiveChannel:       parseInt(active, 10) || 0,
+                MACId:                   macId,
+                RouterId:                nsEl('nsRouterId').value.trim(),
+                MobileNumber:            nsEl('nsMobileNumber').value.trim(),
+                ModemType:               modemType,
+                SingleModamType:         modemType === 1 ? nsIntOrNull(nsEl('nsSingleModamType').value) : null,
+                ServerType:              nsIntOrNull(nsEl('nsServerType').value),
+                PLCLogId:                plcLog === 0 ? null : plcLog,
+                SmsFrequency:            nsIntOrNull(nsEl('nsSmsFrequency').value),
+                SmsLimit:                nsIntOrNull(nsEl('nsSmsLimit').value),
+                ChargerDelay:            nsIntOrNull(nsEl('nsChargerDelay').value),
+                RebootTotal:             nsIntOrNull(nsEl('nsRebootTotal').value),
+                RebootDay:               nsIntOrNull(nsEl('nsRebootDay').value),
+                RebootDaynum:            nsIntOrNull(nsEl('nsRebootDaynum').value),
+                IsDatalogger:            isDL,
+                DataLoggerVersion:       isDL ? nsIntOrNull((document.querySelector('input[name="nsDLVersion"]:checked') || {}).value) : null,
+                IsDataLoggerJsonReverse: nsEl('nsIsDataLoggerJsonReverse').checked,
+                // Create → always a project; Edit → false once "Project Completed" is ticked
+                IsProject:               (parseInt(nsEl('nsId').value, 10) || 0) > 0 ? !nsEl('nsProjectCompleted').checked : true
             };
+            NS_FLAGS.forEach(function (f) { payload[f.key] = nsEl('nsFlag_' + f.key).checked; });
 
-            var btn = document.getElementById('btnCreateStation');
+            var isEdit = payload.Id > 0;
+            var btn = nsEl('btnCreateStation');
             btn.disabled = true; btn.textContent = 'Saving…';
 
             fetch('/Station/SaveSite', {
@@ -433,14 +687,14 @@
                 if (res && res.error) {
                     alert(res.error);
                 } else {
-                    var m = bootstrap.Modal.getInstance(document.getElementById('newStationModal'));
+                    var m = bootstrap.Modal.getInstance(nsEl('newStationModal'));
                     if (m) m.hide();
-                    location.reload();   // simplest: refresh so dropdown picks up the new station
+                    location.reload();   // simplest: refresh so dropdown picks up the change
                 }
             })
             .catch(() => alert('Save failed'))
             .finally(() => {
-                btn.disabled = false; btn.textContent = 'Create Station';
+                btn.disabled = false; btn.textContent = isEdit ? 'Update Station' : 'Create Station';
             });
         }
     </script>

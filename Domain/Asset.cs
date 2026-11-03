@@ -44,6 +44,10 @@ namespace Domain
         public int? BHMSTypeId { get; set; }
         public int? IPSTypeId { get; set; }
         public bool? IsTemperature { get; set; }
+        public bool? VibrationA { get; set; }
+        public bool? VibrationB { get; set; }
+        public bool? IsCallingTrack { get; set; }
+        public string CallingSignalName { get; set; }
         public int ZoneId { get; set; }
         public int DivisionId { get; set; }
         public decimal? NumberOfCell { get; set; }
