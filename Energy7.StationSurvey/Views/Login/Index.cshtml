@@ -364,13 +364,6 @@
             <div class="pg-title">Welcome back</div>
             <div class="pg-sub">Sign in to Station Survey</div>
 
-            @if (!string.IsNullOrEmpty(ViewBag.Error as string))
-            {
-                <div class="e7-err">
-                    <i class="bi bi-exclamation-circle-fill"></i>
-                    @ViewBag.Error
-                </div>
-            }
 
             <form asp-action="Index" asp-controller="Login" method="post" id="loginForm">
                 @Html.AntiForgeryToken()
@@ -425,8 +418,13 @@
 
     </div>
 
+    <partial name="_Toast" />
     <script>
-        document.getElementById('loginForm').addEventListener('submit', function () {
+        document.getElementById('loginForm').addEventListener('submit', function (e) {
+          var email = document.getElementById('EmailAddress').value.trim();
+          var pwd   = document.getElementById('pwdInput').value;
+          if (!email) { e.preventDefault(); E7.warn('Enter your email address'); document.getElementById('EmailAddress').focus(); return; }
+          if (!pwd) { e.preventDefault(); E7.warn('Enter your password'); document.getElementById('pwdInput').focus(); return; }
           document.getElementById('btnText').style.display    = 'none';
           document.getElementById('btnSpinner').style.display = 'inline-flex';
           document.getElementById('btnLogin').disabled        = true;

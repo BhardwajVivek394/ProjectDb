@@ -109,6 +109,19 @@
                 <div style="color:var(--txm);font-size:11px">Select a station</div>
             </div>
         </div>
+
+        <!-- SURVEY — NMDL / SIP / SMMS document upload (per station) -->
+        <div class="ic" id="nmdlCard" style="margin-top:12px">
+            <h6 style="display:flex;align-items:center;gap:8px">
+                <i class="bi bi-file-earmark-arrow-up"></i> NMDL / Survey Documents
+                <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+                    <input type="file" id="nmdlFile" style="display:none"
+                           accept=".pdf,.xls,.xlsx,.doc,.docx,.csv,.png,.jpg,.jpeg" onchange="nmdlPicked(this)">
+                    <button class="be7" onclick="document.getElementById('nmdlFile').click()"><i class="bi bi-upload me-1"></i>Upload</button>
+                </span>
+            </h6>
+            <div id="nmdlList" style="font-size:12px"><div style="color:var(--txm);font-size:11px">Select a station</div></div>
+        </div>
     </div>
 
     <!-- ── ASSETS ── -->
@@ -327,19 +340,23 @@
 
     <!-- ── YARD CONFIG ── -->
     <div class="tp" id="tab-yard">
-        <div class="yg">
-            <div class="yi">
-                <div class="yn">Platform 1 Up Line</div>
-                <div class="yc"><input type="checkbox" checked><span>Signal A1</span></div>
-                <div class="yc"><input type="checkbox" checked><span>Track 1T</span></div>
-                <div class="yc"><input type="checkbox"><span>Signal A2</span></div>
-                <div class="yc"><input type="checkbox" checked><span>PM-01</span></div>
+        <div id="ycRoot">
+            <div class="yc-top">
+                <div class="yc-top-l">
+                    <div class="yc-title"><i class="bi bi-diagram-3"></i> Yard Configuration</div>
+                    <div class="yc-sub" id="ycStationSub">Select a station</div>
+                </div>
+                <div class="yc-stats" id="ycStats"></div>
+                <button class="bg7" id="ycRefresh" title="Reload"><i class="bi bi-arrow-clockwise"></i></button>
             </div>
-            <div class="yi">
-                <div class="yn">Platform 2 Down Line</div>
-                <div class="yc"><input type="checkbox" checked><span>Signal B1</span></div>
-                <div class="yc"><input type="checkbox" checked><span>Track 2T</span></div>
-                <div class="yc"><input type="checkbox"><span>PM-02</span></div>
+            <div class="yc-layout">
+                <div class="yc-side">
+                    <div class="yc-side-h">Clusters / Locations <span id="ycClusterCount" class="yc-badge">0</span></div>
+                    <div id="ycClusterList"><div class="yc-empty">Select a station</div></div>
+                </div>
+                <div class="yc-main" id="ycDetail">
+                    <div class="yc-empty-lg"><i class="bi bi-diagram-3"></i><div>Select a cluster to see its cards and wiring</div></div>
+                </div>
             </div>
         </div>
     </div>
@@ -591,6 +608,8 @@
 
         // ── Station change → load CardLine stats ──────────────────────────────────────
         function onStationChange(siteId) {
+            // <select>.value is a string; [FromBody] int SiteId (System.Text.Json) rejects "123" → model binds as null
+            siteId = parseInt(siteId, 10) || 0;
             debugger;
             var stationName  = $('#ddStation option:selected').text();
             var zoneName     = $('#ddZone option:selected').text();
@@ -613,10 +632,9 @@
             $('#infoZoneDiv').text(zoneName + ' / ' + divisionName);
             $('#stationInfo').text(zoneName + ' · ' + divisionName + ' · ' + stationName);
 
-            // Show loading state
-            ['statLocations','statClusters','statDataPoints','statAssets'].forEach(function(id) {
-                $('#' + id).html('<i class="bi bi-arrow-clockwise" style="font-size:14px;animation:spin .7s linear infinite"></i>');
-            });
+            // Loading state: dim the current numbers instead of wiping them to spinning icons
+            // (wiping changed each tile's height and made the whole panel flicker)
+            $('#statLocations,#statClusters,#statDataPoints,#statAssets').css('opacity', '.35');
 
             // Call CardLine API via controller
             $.ajax({
@@ -626,7 +644,7 @@
                     if (!data || data.error) { resetStats(); return; }
                     bindStats(data);
                 },
-                error: function () { resetStats(); }
+                error: function (xhr) { resetStats(); }
             });
              __siteAssets = []; __siteAssetsLoaded = false;
              loadAssetTypes(siteId);
@@ -636,6 +654,7 @@
              });
              loadSurveyChecklist(siteId);
              loadLocations(siteId);
+             loadNMDL(siteId);
         }
 
         // ── LOCATION tab — Cluster rows "cluster_{RF}/{location}" via the API ─────────
@@ -661,7 +680,7 @@
                     renderLocations();
                     loadSurveyGear(siteId);
                 },
-                error: function () { $('#locClusters').html('<div style="font-size:11px;color:var(--err)">Request failed</div>'); }
+                error: function (xhr) { $('#locClusters').html('<div style="font-size:11px;color:var(--err)">Request failed</div>'); }
             });
         }
 
@@ -716,7 +735,7 @@
         }
 
         function addGearRow() {
-            if (!__locSiteId) { alert('Select a station first'); return; }
+            if (!__locSiteId) { E7.warn('Select a station first'); return; }
             if (!$('#gearBody tr[data-id]').length) $('#gearBody').empty();
             $('#gearBody').append(gearRowHtml({}));
         }
@@ -737,17 +756,17 @@
                 DistanceFromRR: $r.find('.g-dist').val()
             };
             GEAR_COLS.forEach(function (c) { body[c] = $r.find('.g-' + c).val(); });
-            if (!body.LocationBoxNo.trim()) { alert('Enter the location box'); return; }
-            if (!body.Cluster) { alert('Enter the RF cluster number'); return; }
+            if (!body.LocationBoxNo.trim()) { E7.warn('Enter the location box'); return; }
+            if (!body.Cluster) { E7.warn('Enter the RF cluster number'); return; }
             btn.disabled = true; btn.textContent = '…';
             $.ajax({
                 url: '@Url.Action("SaveSurveyGear", "Station")', type: 'POST', contentType: 'application/json',
                 data: JSON.stringify(body),
                 success: function (res) {
-                    if (res && res.success) loadSurveyGear(__locSiteId);
-                    else { alert((res && res.error) || 'Save failed'); btn.disabled = false; btn.textContent = 'Save'; }
+                    if (res && res.success) { E7.success('Survey row "' + body.LocationBoxNo.trim() + '" saved'); loadSurveyGear(__locSiteId); }
+                    else { E7.error((res && res.error) || 'Save failed'); btn.disabled = false; btn.textContent = 'Save'; }
                 },
-                error: function () { alert('Request failed'); btn.disabled = false; btn.textContent = 'Save'; }
+                error: function (xhr) { E7.ajaxError(xhr); btn.disabled = false; btn.textContent = 'Save'; }
             });
         }
 
@@ -757,8 +776,8 @@
             if (!id) { $r.remove(); return; }   // unsaved row
             if (!confirm('Delete survey row "' + $r.find('.g-box').val() + '"? This removes it permanently (also on the 90 site).')) return;
             $.post('@Url.Action("DeleteSurveyGear", "Station")', { id: id, siteId: __locSiteId }, function (res) {
-                if (res && res.success) loadSurveyGear(__locSiteId); else alert((res && res.error) || 'Delete failed');
-            });
+                if (res && res.success) { E7.success('Survey row deleted'); loadSurveyGear(__locSiteId); } else E7.error((res && res.error) || 'Delete failed');
+            }).fail(function (xhr) { E7.ajaxError(xhr, 'Delete failed'); });
         }
 
         // Point 5: which Track / Signal / Point Machine assets are not mapped to any location box yet
@@ -805,6 +824,7 @@
                  +   (l.powerSupplyId ? '<span class="cl-info" style="color:var(--info)">' + LOC_POWER[l.powerSupplyId] + '</span>'
                                       : '<span class="cl-info" style="color:var(--warn)">no PS</span>')
                  +   '<span class="cl-info">' + wired + ' wired</span>'
+                 +   '<span class="cl-set" title="Photos of this location" onclick="event.stopPropagation();openPhotos(' + l.id + ')"><i class="bi bi-camera"></i> photos</span>'
                  +   '<span class="cl-set" onclick="editLocation(' + l.id + ')">edit</span>'
                  + '</div></div>';
         }
@@ -849,7 +869,7 @@
         }
 
         function addRfClusterBox() {
-            if (!__locSiteId) { alert('Select a station first'); return; }
+            if (!__locSiteId) { E7.warn('Select a station first'); return; }
             var n = parseInt($('#locNewCluster').val(), 10);
             if (!n) return;
             __extraRfBoxes.push(n);
@@ -864,17 +884,17 @@
                 contentType: 'application/json',
                 data: JSON.stringify(data),
                 success: function (res) {
-                    if (res && res.success) { if (done) done(); loadLocations(__locSiteId); }
-                    else alert((res && res.error) || 'Save failed');
+                    if (res && res.success) { E7.success('Location "' + data.LocationName + '" ' + (data.Id ? 'saved' : 'created')); if (done) done(); loadLocations(__locSiteId); }
+                    else E7.error((res && res.error) || 'Save failed');
                 },
-                error: function () { alert('Request failed'); }
+                error: function (xhr) { E7.ajaxError(xhr); }
             });
         }
 
         function createLocation() {
-            if (!__locSiteId) { alert('Select a station first'); return; }
+            if (!__locSiteId) { E7.warn('Select a station first'); return; }
             var name = $('#locNewName').val().trim();
-            if (!name) { $('#locNewName').focus(); return; }
+            if (!name) { E7.warn('Enter a location name'); $('#locNewName').focus(); return; }
             saveLocation({
                 Id: 0, SiteId: __locSiteId, LocationName: name,
                 TypeId: parseInt($('#locNewType').val(), 10),
@@ -935,7 +955,7 @@
                     if (!res || res.error) { $('#surveyList').html('<div style="color:var(--err);font-size:11px">' + ((res && res.error) || 'Failed to load') + '</div>'); return; }
                     renderSurveyChecklist(siteId, res);
                 },
-                error: function () { $('#surveyList').html('<div style="color:var(--err);font-size:11px">Request failed</div>'); }
+                error: function (xhr) { $('#surveyList').html('<div style="color:var(--err);font-size:11px">Request failed</div>'); }
             });
         }
 
@@ -966,15 +986,17 @@
                 contentType: 'application/json',
                 data: JSON.stringify({ SiteId: siteId, ItemNo: itemNo, Done: chk.checked }),
                 success: function (res) {
-                    if (!res || res.error) { alert((res && res.error) || 'Save failed'); chk.checked = !chk.checked; $all.prop('disabled', false); return; }
+                    if (!res || res.error) { E7.error((res && res.error) || 'Save failed'); chk.checked = !chk.checked; $all.prop('disabled', false); return; }
+                    E7.success('Checklist item ' + itemNo + (chk.checked ? ' marked done' : ' marked not done'));
                     renderSurveyChecklist(siteId, res);
                 },
-                error: function () { alert('Request failed'); chk.checked = !chk.checked; $all.prop('disabled', false); }
+                error: function (xhr) { E7.ajaxError(xhr); chk.checked = !chk.checked; $all.prop('disabled', false); }
             });
         }
 
         function bindStats(data) {
             if (!data || data.error) { resetStats(); return; }
+            $('#statLocations,#statClusters,#statDataPoints,#statAssets').css('opacity', '');
 
             $('#statLocations').text(data.totalLocations ?? 0);
             $('#statLocationsSub').text((data.totalLocations ?? 0) + ' unique locations');
@@ -1010,6 +1032,7 @@
             }
         }
         function resetStats() {
+            $('#statLocations,#statClusters,#statDataPoints,#statAssets').css('opacity', '');
             ['statLocations','statClusters','statDataPoints','statAssets'].forEach(function(id) {
                 $('#' + id).text('—');
             });
@@ -1030,8 +1053,708 @@
                 tab.classList.add('on');
                 var panel = document.getElementById('tab-' + tab.dataset.tab);
                 if (panel) panel.classList.add('on');
+                if (tab.dataset.tab === 'yard') ycOnOpen();
             });
         });
+
+
+        // ══ YARD CONFIG TAB ════════════════════════════════════════════════════════════
+        // Hardware map of the station: clusters → cards → line wiring schedule.
+        // Reuses GetYardClusters (list), GetWireCards (detail) and AddClusterCard.
+        var __ycSite = 0, __ycClusters = [], __ycSelId = 0, __ycCache = {};
+
+        function ensureYcCss() {
+            if (document.getElementById('ycCss')) return;
+            var css = ''
+              + '#ycRoot{display:flex;flex-direction:column;gap:12px}'
+              + '.yc-top{display:flex;align-items:center;gap:14px;background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:12px 16px}'
+              + '.yc-title{font-size:14px;font-weight:700;color:var(--tx);display:flex;align-items:center;gap:7px}'
+              + '.yc-title .bi{color:var(--co)}'
+              + '.yc-sub{font-size:11px;color:var(--txm);margin-top:2px}'
+              + '.yc-stats{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}'
+              + '.yc-stat{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:5px 12px;text-align:center;min-width:72px}'
+              + '.yc-stat b{display:block;font-size:16px;font-weight:700;color:var(--tx);line-height:1.1}'
+              + '.yc-stat span{font-size:9px;color:var(--txm);text-transform:uppercase;letter-spacing:.4px}'
+              + '.yc-layout{display:grid;grid-template-columns:260px 1fr;gap:12px;align-items:start}'
+              + '.yc-side{background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden}'
+              + '.yc-side-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--txm);padding:10px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:6px}'
+              + '.yc-badge{margin-left:auto;background:var(--co);color:#fff;font-size:10px;border-radius:10px;padding:1px 8px}'
+              + '.yc-cl{padding:9px 14px;border-bottom:1px dashed var(--bd);cursor:pointer;transition:.1s}'
+              + '.yc-cl:last-child{border-bottom:none}'
+              + '.yc-cl:hover{background:var(--co-lt)}'
+              + '.yc-cl.on{background:var(--co-lt);border-left:3px solid var(--co);padding-left:11px}'
+              + '.yc-cl-top{display:flex;align-items:center;gap:6px}'
+              + '.yc-cl-nm{font-size:12px;font-weight:600;color:var(--tx)}'
+              + '.yc-cl-rf{font-size:9px;background:var(--e7);color:#fff;border-radius:4px;padding:1px 6px;margin-left:auto}'
+              + '.yc-cl-meta{font-size:10px;color:var(--txm);margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}'
+              + '.yc-pill{font-size:9px;border-radius:4px;padding:1px 6px;border:1px solid var(--bd)}'
+              + '.yc-pill.indoor{background:#eef4fb;color:#2563a8;border-color:#cfe0f2}'
+              + '.yc-pill.outdoor{background:#fef5ea;color:#b4720f;border-color:#f3dcbd}'
+              + '.yc-pill.wired{background:#e7f5ee;color:#1e7a4f;border-color:#bfe3cf}'
+              + '.yc-main{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px;min-height:360px}'
+              + '.yc-empty,.yc-empty-lg{color:var(--txl);font-size:11px;text-align:center;padding:16px}'
+              + '.yc-empty-lg{padding:70px 16px;font-size:12px}'
+              + '.yc-empty-lg .bi{font-size:34px;display:block;margin-bottom:10px;color:var(--bd)}'
+              + '.yc-dh{display:flex;align-items:flex-start;gap:12px;border-bottom:1px solid var(--bd);padding-bottom:12px;margin-bottom:14px}'
+              + '.yc-dh-nm{font-size:15px;font-weight:700;color:var(--tx)}'
+              + '.yc-dh-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}'
+              + '.yc-dh-tags .t{font-size:10px;background:var(--bg);border:1px solid var(--bd);border-radius:5px;padding:2px 8px;color:var(--txm)}'
+              + '.yc-dh-tags .t b{color:var(--tx);font-weight:600}'
+              + '.yc-adc{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center}'
+              + '.yc-adc-lbl{font-size:10px;color:var(--txm);text-transform:uppercase;letter-spacing:.3px;margin-right:2px}'
+              + '.yc-adc .chip{font-size:10px;background:#f3eefa;color:#6b3fa0;border:1px solid #e0d3f0;border-radius:12px;padding:2px 10px;font-weight:600}'
+              + '.yc-adc-none{font-size:10px;color:var(--txl)}'
+              + '.yc-adc-add{font-size:10px;border:1px dashed var(--co);color:var(--co);background:#fff;border-radius:12px;padding:2px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:3px}'
+              + '.yc-adc-add:hover{background:var(--co-lt)}'
+              + '.yc-adc-form{display:inline-flex;gap:5px;align-items:center;margin-left:4px}'
+              + '.yc-adc-form .loc-s-sm{font-size:11px;padding:3px 6px}'
+              + '.yc-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}'
+              + '.yc-card{border:1px solid var(--bd);border-top:3px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff}'
+              + '.yc-card.k-I{border-top-color:#e16349}.yc-card.k-V{border-top-color:#2980b9}.yc-card.k-DI{border-top-color:#8e44ad}.yc-card.k-M{border-top-color:#ba7517}'
+              + '.yc-card-h{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border-bottom:1px solid var(--bd)}'
+              + '.yc-card-h .nm{font-size:13px;font-weight:700;color:var(--tx)}'
+              + '.yc-card-h .kb{font-size:8px;font-weight:700;letter-spacing:.4px;padding:1px 6px;border-radius:3px;background:#fff;border:1px solid var(--bd);color:var(--txm)}'
+              + '.yc-card-h .use{margin-left:auto;font-size:10px;color:var(--txm)}'
+              + '.yc-card-h .ubar{width:52px;height:5px;background:#efe9e6;border-radius:3px;overflow:hidden}'
+              + '.yc-card-h .ubar>i{display:block;height:100%;background:var(--ok)}'
+              + '.yc-sched{width:100%;border-collapse:collapse;font-size:10.5px}'
+              + '.yc-sched td{padding:4px 8px;border-bottom:1px solid #f0ebe9}'
+              + '.yc-sched tr:last-child td{border-bottom:none}'
+              + '.yc-sched tr.used{background:#fff}'
+              + '.yc-sched tr.free td{color:var(--txl)}'
+              + '.yc-sched .ln{font-weight:700;color:var(--txm);width:30px;font-family:ui-monospace,Consolas,monospace}'
+              + '.yc-sched .as{font-weight:600;color:var(--tx)}'
+              + '.yc-sched .at{color:var(--txm)}'
+              + '.yc-sched .vi{font-size:8px;font-weight:700;padding:0 4px;border-radius:3px;margin-left:3px}'
+              + '.yc-sched .vi.I{background:#fdece8;color:#c0392b}.yc-sched .vi.V{background:#e8f1fa;color:#2471a3}'
+              + '.yc-sched .ap{text-align:right;color:var(--txl);font-size:9px;white-space:nowrap}'
+              + '.yc-sched .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:1px}'
+              + '.yc-sched .dot.u{background:var(--ok)}.yc-sched .dot.f{background:#d8cfca}'
+              + '.yc-addcard{border:1px dashed var(--bd);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:16px;background:#fffdfc;min-height:120px}'
+              + '.yc-addcard .ttl{font-size:12px;font-weight:600;color:var(--co)}'
+              + '.yc-addcard .row{display:flex;gap:5px}'
+              + '.yc-map-btn{margin-left:8px;font-size:10px;font-weight:600;color:var(--co);background:#fff;border:1px solid var(--bd);border-radius:6px;padding:2px 9px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:.12s}'
+              + '.yc-map-btn:hover{background:var(--co);color:#fff;border-color:var(--co)}'
+              + '.yc-addcard{border:1.5px dashed var(--bd);border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:9px;padding:18px 14px;background:linear-gradient(180deg,#fffdfc,#fff8f6);min-height:120px;justify-content:center}'
+              + '.yc-ac-h{font-size:13px;font-weight:700;color:var(--co);display:flex;align-items:center;gap:6px}'
+              + '.yc-ac-sub{font-size:10px;color:var(--txm);text-align:center;margin-top:-3px}'
+              + '.yc-ac-types{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}'
+              + '.yc-ac-type{font-size:11px;font-weight:700;border:1px solid var(--bd);border-bottom-width:3px;background:#fff;border-radius:7px;padding:5px 11px;cursor:pointer;color:var(--txm);transition:.12s}'
+              + '.yc-ac-type.k-I{border-bottom-color:#e16349}.yc-ac-type.k-V{border-bottom-color:#2980b9}.yc-ac-type.k-DI{border-bottom-color:#8e44ad}.yc-ac-type.k-M{border-bottom-color:#ba7517}'
+              + '.yc-ac-type:hover{border-color:var(--co);color:var(--tx)}'
+              + '.yc-ac-type.on{background:var(--co-lt);color:var(--tx);box-shadow:0 0 0 2px var(--co)}'
+              + '.yc-ac-add{display:inline-flex;align-items:center;gap:5px;padding:7px 18px;font-size:12px}'
+              + '#mapModal .modal-header{background:var(--co-lt);border-bottom:1px solid var(--bd);padding:12px 18px}'
+              + '#mapModal .modal-title{font-size:14px;font-weight:700}'
+              + '#mapModal .modal-body{padding:0}'
+              + '.map-intro{font-size:11px;color:var(--txm);padding:10px 18px;border-bottom:1px solid var(--bd);background:#fbf9f8}'
+              + '.map-wrap{max-height:62vh;overflow:auto}'
+              + '.map-tbl{width:100%;border-collapse:collapse;font-size:11px}'
+              + '.map-tbl th{position:sticky;top:0;background:#fff;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.3px;color:var(--txl);font-weight:700;padding:8px 10px;border-bottom:1px solid var(--bd);z-index:1}'
+              + '.map-tbl td{padding:5px 10px;border-bottom:1px solid #f4efed;vertical-align:middle}'
+              + '.map-tbl tr:hover td{background:#fbf9f8}'
+              + '.map-tbl tr.set td{background:#f3faf6}'
+              + '.map-tbl tr.set:hover td{background:#eaf6ef}'
+              + '.map-ln{font-weight:700;color:var(--txm);font-family:ui-monospace,Consolas,monospace;white-space:nowrap}'
+              + '.map-sel{width:100%;min-width:92px;font-size:11px;padding:4px 6px;border:1px solid var(--bd);border-radius:6px;background:#fff;color:var(--tx)}'
+              + '.map-sel:focus{border-color:var(--co);outline:none}'
+              + '.map-sel:disabled{background:#f4efed;color:var(--txl)}'
+              + '.map-clr{border:none;background:#f1eeec;color:var(--txm);border-radius:5px;width:24px;height:24px;cursor:pointer;font-size:11px}'
+              + '.map-clr:hover{background:#f6d7d0;color:var(--err)}'
+              + '.map-foot-info{font-size:11px;color:var(--txm);margin-right:auto}'
+              + '.e7-spin{width:24px;height:24px;border:2.5px solid var(--bd);border-top-color:var(--co);border-radius:50%;animation:e7spin .65s linear infinite}'
+              + '@@keyframes e7spin{to{transform:rotate(360deg)}}'
+              + '.yc-busy{position:absolute;inset:0;background:rgba(255,255,255,.5);backdrop-filter:blur(.5px);display:flex;align-items:center;justify-content:center;z-index:6;border-radius:10px}'
+              + '.yc-rel{position:relative}.yc-dim{opacity:.45;transition:opacity .15s}'
+              + '@@media(max-width:860px){.yc-layout{grid-template-columns:1fr}}';
+            $('head').append('<style id="ycCss">' + css + '</style>');
+        }
+
+        function ycOnOpen() {
+            ensureYcCss();
+            var site = parseInt(__currentSiteId, 10) || 0;
+            if (!site) { $('#ycStationSub').text('Select a station first'); $('#ycClusterList').html('<div class="yc-empty">Select a station</div>'); $('#ycStats').html(''); return; }
+            if (site === __ycSite && __ycClusters.length) return;   // already loaded for this station
+            ycLoad(site);
+        }
+
+        function ycLoad(site) {
+            $('#ycStationSub').text(($('#infoName').text() || '') + ' — loading…');
+            // Keep the current list visible (dimmed) on refresh; show skeleton only on first load
+            if ($('#ycClusterList .yc-cl').length) ycOverlay('#ycClusterList', true);
+            else $('#ycClusterList').html('<div class="yc-empty"><div class="e7-spin" style="margin:10px auto"></div>Loading…</div>');
+            $.ajax({
+                url: '@Url.Action("GetYardClusters", "Station")', data: { siteId: site },
+                success: function (res) {
+                    if (!res || res.error || !Array.isArray(res.clusters)) {
+                        $('#ycClusterList').html('<div class="yc-empty" style="color:var(--err)">' + locEsc((res && res.error) || 'Could not load') + '</div>');
+                        return;
+                    }
+                    __ycSite = site; __ycClusters = res.clusters; __ycCache = {}; __ycSelId = 0;
+                    ycRenderList();
+                    ycRenderStats();
+                    if (__ycClusters.length) ycSelectCluster(__ycClusters[0].id);
+                    else $('#ycDetail').html('<div class="yc-empty-lg"><i class="bi bi-diagram-3"></i><div>No clusters yet. Add a location on the <b>Location</b> tab, then wire assets.</div></div>');
+                },
+                error: function (xhr) { $('#ycClusterList').html('<div class="yc-empty" style="color:var(--err)">Request failed</div>'); }
+            });
+        }
+
+        function ycRenderStats() {
+            var nCl = __ycClusters.length;
+            var wired = __ycClusters.reduce(function (s, c) { return s + (c.wiredLines || 0); }, 0);
+            var assets = __ycClusters.reduce(function (s, c) { return s + (c.assetCount || 0); }, 0);
+            $('#ycStationSub').text(($('#infoName').text() || '') + ' · hardware wiring layout');
+            $('#ycStats').html(
+                '<div class="yc-stat"><b>' + nCl + '</b><span>Clusters</span></div>'
+              + '<div class="yc-stat"><b>' + wired + '</b><span>Wired lines</span></div>'
+              + '<div class="yc-stat"><b>' + assets + '</b><span>Asset links</span></div>');
+            $('#ycClusterCount').text(nCl);
+        }
+
+        function ycRenderList() {
+            if (!__ycClusters.length) { $('#ycClusterList').html('<div class="yc-empty">No clusters</div>'); return; }
+            $('#ycClusterList').html(__ycClusters.map(function (c) {
+                var typ = c.typeId === 1 ? '<span class="yc-pill indoor">Indoor</span>' : c.typeId === 2 ? '<span class="yc-pill outdoor">Outdoor</span>' : '';
+                var wired = c.wiredLines ? '<span class="yc-pill wired">' + c.wiredLines + ' wired</span>' : '<span class="yc-pill">empty</span>';
+                return '<div class="yc-cl' + (c.id === __ycSelId ? ' on' : '') + '" data-id="' + c.id + '" onclick="ycSelectCluster(' + c.id + ')">'
+                     +   '<div class="yc-cl-top"><span class="yc-cl-nm">' + locEsc(c.location || c.name) + '</span>'
+                     +     (c.rfCluster ? '<span class="yc-cl-rf">RF ' + c.rfCluster + '</span>' : '') + '</div>'
+                     +   '<div class="yc-cl-meta">' + typ + wired + (c.modemId ? '<span style="color:var(--txl)">· ' + locEsc(c.modemId) + '</span>' : '') + '</div>'
+                     + '</div>';
+            }).join(''));
+        }
+
+        // Overlay a panel with a spinner while keeping its current content (and height) in place,
+        // so loading never collapses the panel and makes it jump/flicker.
+        function ycOverlay(sel, on) {
+            var $e = $(sel);
+            if (on) {
+                $e.addClass('yc-rel');
+                if (!$e.children('.yc-busy').length) {
+                    $e.children().addClass('yc-dim');
+                    $e.append('<div class="yc-busy"><div class="e7-spin"></div></div>');
+                }
+            } else {
+                $e.children('.yc-busy').remove();
+                $e.children().removeClass('yc-dim');
+            }
+        }
+
+        function ycSelectCluster(id) {
+            __ycSelId = id;
+            $('#ycClusterList .yc-cl').removeClass('on');
+            $('#ycClusterList .yc-cl[data-id="' + id + '"]').addClass('on');
+            var cl = __ycClusters.filter(function (c) { return c.id === id; })[0];
+            if (!cl) return;
+            if (__ycCache[id]) { ycRenderDetail(cl, __ycCache[id]); return; }   // cached → instant, no spinner
+            ycOverlay('#ycDetail', true);   // keep old cards visible (dimmed) while the new ones load
+            $.ajax({
+                url: '@Url.Action("GetWireCards", "Station")', data: { clusterId: id },
+                success: function (res) {
+                    if (__ycSelId !== id) { ycOverlay('#ycDetail', false); return; }
+                    if (!res || res.error) { ycOverlay('#ycDetail', false); $('#ycDetail').html('<div class="yc-empty-lg" style="color:var(--err)">' + locEsc((res && res.error) || 'Could not load') + '</div>'); return; }
+                    __ycCache[id] = res;
+                    ycRenderDetail(cl, res);   // replaces content (overlay removed with it)
+                },
+                error: function (xhr) { ycOverlay('#ycDetail', false); $('#ycDetail').html('<div class="yc-empty-lg" style="color:var(--err)">Request failed</div>'); }
+            });
+        }
+
+        function ycRenderDetail(cl, data) {
+            var cards = data.cards || [], adcs = data.adcs || [];
+            var power = { 1: '24 V', 2: '110 V', 3: '110→24 V' }[cl.powerSupplyId] || '—';
+            var totLines = 0, usedLines = 0;
+            cards.forEach(function (c) { totLines += c.total; usedLines += c.used; });
+
+            var head = '<div class="yc-dh"><div style="flex:1">'
+                     +   '<div class="yc-dh-nm">' + locEsc(cl.location || cl.name) + '</div>'
+                     +   '<div class="yc-dh-tags">'
+                     +     (cl.rfCluster ? '<span class="t">RF <b>' + cl.rfCluster + '</b></span>' : '')
+                     +     '<span class="t">' + (cl.typeId === 1 ? 'Indoor' : cl.typeId === 2 ? 'Outdoor' : '—') + '</span>'
+                     +     '<span class="t">Power <b>' + power + '</b></span>'
+                     +     (cl.modemId ? '<span class="t">Modem <b>' + locEsc(cl.modemId) + '</b></span>' : '')
+                     +     (cl.ip ? '<span class="t">IP <b>' + locEsc(cl.ip) + '</b></span>' : '')
+                     +     '<span class="t">Cards <b>' + cards.length + '</b></span>'
+                     +     '<span class="t">Lines <b>' + usedLines + ' / ' + totLines + '</b></span>'
+                     +   '</div></div>'
+                     +   '<button class="bg7" onclick="editLocation(' + cl.id + ')" title="Edit this location"><i class="bi bi-pencil"></i> Edit</button>'
+                     + '</div>';
+
+            var adcRow = '<div class="yc-adc"><span class="yc-adc-lbl">ADCs</span>'
+                       + (adcs.length ? adcs.map(function (a) { return '<span class="chip">' + locEsc(a.name) + '</span>'; }).join('')
+                                      : '<span class="yc-adc-none">none yet</span>')
+                       + '<button class="yc-adc-add" onclick="ycToggleAdcForm(this)" title="Add an ADC to this cluster"><i class="bi bi-plus"></i> ADC</button>'
+                       + '<span class="yc-adc-form" style="display:none">'
+                       +   '<input class="loc-s-sm yc-adcnum" type="number" min="1" placeholder="ADC no." style="width:76px">'
+                       +   '<select class="loc-s-sm yc-adctype" style="width:118px"><option value="2">Normal</option><option value="1">Special 1056</option><option value="3">Special 1507</option></select>'
+                       +   '<button class="be7" style="padding:3px 11px" onclick="ycAddAdc(this)">Add</button>'
+                       +   '<button class="bg7" style="padding:3px 9px" onclick="ycToggleAdcForm(this)">Cancel</button>'
+                       + '</span>'
+                       + '</div>';
+
+            var cardHtml = cards.map(function (c) {
+                var k = wmCardKind(c.name);
+                var kb = { I: 'CURRENT', V: 'VOLTAGE', DI: 'DIGITAL', M: 'MINT' }[k];
+                var pct = c.total ? Math.round(c.used * 100 / c.total) : 0;
+                var rows = (c.lines || []).map(function (l) {
+                    if (!l.used) return '<tr class="free"><td class="ln">L' + l.number + '</td><td colspan="2"><span class="dot f"></span>free</td><td class="ap"></td></tr>';
+                    var isCur = (l.attributeName || '').toLowerCase().indexOf('ma') >= 0;
+                    var ap = [l.adc, l.pin ? 'P' + l.pin : ''].filter(Boolean).join('·');
+                    return '<tr class="used"><td class="ln">L' + l.number + '</td>'
+                         + '<td class="as">' + locEsc(l.assetName || '—') + '</td>'
+                         + '<td class="at">' + locEsc(l.attributeName || '') + (l.attributeName ? '<span class="vi ' + (isCur ? 'I' : 'V') + '">' + (isCur ? 'I' : 'V') + '</span>' : '') + '</td>'
+                         + '<td class="ap">' + locEsc(ap) + '</td></tr>';
+                }).join('');
+                return '<div class="yc-card k-' + k + '">'
+                     +   '<div class="yc-card-h"><span class="nm">' + locEsc(c.name) + '</span><span class="kb">' + kb + '</span>'
+                     +     '<span class="use">' + c.used + '/' + c.total + '</span><div class="ubar"><i style="width:' + pct + '%"></i></div>'
+                     +     '<button class="yc-map-btn" onclick="ycOpenMap(' + c.id + ')" title="Map / edit this card’s lines"><i class="bi bi-pencil-square"></i> Map</button></div>'
+                     +   '<table class="yc-sched"><tbody>' + (rows || '<tr><td class="yc-empty">no lines</td></tr>') + '</tbody></table>'
+                     + '</div>';
+            }).join('');
+
+            var addKind = { C: 'I', V5: 'V', V82: 'V', MintCard: 'M', DI: 'DI' };
+            var addTile = '<div class="yc-addcard">'
+                        +   '<div class="yc-ac-h"><i class="bi bi-plus-circle"></i> Add a card</div>'
+                        +   '<div class="yc-ac-sub">Pick a card type — it is created with its empty lines</div>'
+                        +   '<div class="yc-ac-types">'
+                        +     ['C', 'V5', 'V82', 'MintCard', 'DI'].map(function (t, i) {
+                                  return '<button class="yc-ac-type k-' + addKind[t] + (i === 0 ? ' on' : '') + '" data-t="' + t + '" onclick="ycPickAddType(this)">' + t + '</button>';
+                              }).join('')
+                        +   '</div>'
+                        +   '<button class="be7 yc-ac-add" onclick="ycAddCard(this)"><i class="bi bi-plus-lg"></i> Add card</button>'
+                        + '</div>';
+
+            $('#ycDetail').html(head + adcRow + '<div class="yc-cards">' + cardHtml + addTile + '</div>');
+            __ycAddType = 'C';
+        }
+
+        var __ycAddType = 'C';
+        function ycPickAddType(btn) {
+            __ycAddType = $(btn).data('t');
+            $(btn).closest('.yc-ac-types').find('.yc-ac-type').removeClass('on');
+            $(btn).addClass('on');
+        }
+
+        function ycAddCard(btn) {
+            var ct = __ycAddType || 'C', cid = __ycSelId;
+            if (!cid) return;
+            if (!confirm('Add a new ' + ct + ' card (with its empty lines) to this cluster?')) return;
+            btn.disabled = true; btn.textContent = '…';
+            $.ajax({
+                url: '@Url.Action("AddClusterCard", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ SiteId: parseInt(__currentSiteId, 10) || 0, ClusterId: cid, CardType: ct }),
+                success: function (res) {
+                    if (!(res && res.success)) { E7.error((res && res.error) || 'Could not add card'); btn.disabled = false; btn.textContent = 'Add'; return; }
+                    E7.success(ct + ' card added');
+                    delete __ycCache[cid];           // force reload with the new card
+                    ycSelectCluster(cid);
+                },
+                error: function (xhr) { E7.ajaxError(xhr); btn.disabled = false; btn.textContent = 'Add'; }
+            });
+        }
+
+        // ── Add ADC to the selected cluster (same API as 90 Yard Config → POST api/ADC) ──
+        function ycToggleAdcForm(btn) {
+            var $form = $(btn).closest('.yc-adc').find('.yc-adc-form');
+            var $add = $(btn).closest('.yc-adc').find('.yc-adc-add');
+            if ($form.is(':visible')) { $form.hide(); $add.show(); }
+            else { $form.css('display', 'inline-flex'); $add.hide(); $form.find('.yc-adcnum').val('').focus(); }
+        }
+        function ycAddAdc(btn) {
+            var $form = $(btn).closest('.yc-adc-form');
+            var num = parseInt($form.find('.yc-adcnum').val(), 10) || 0;
+            var type = parseInt($form.find('.yc-adctype').val(), 10) || 0;
+            var cid = __ycSelId;
+            if (!cid) return;
+            if (!num) { E7.warn('Enter the ADC number'); $form.find('.yc-adcnum').focus(); return; }
+            btn.disabled = true; btn.textContent = '…';
+            $.ajax({
+                url: '@Url.Action("AddClusterAdc", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ SiteId: parseInt(__currentSiteId, 10) || 0, ClusterId: cid, AdcNumber: num, AdcTypeId: type }),
+                success: function (res) {
+                    if (!(res && res.success)) { E7.error((res && res.error) || 'Could not add ADC'); btn.disabled = false; btn.textContent = 'Add'; return; }
+                    E7.success('ADC ' + num + ' added');
+                    delete __ycCache[cid];       // refresh so the new ADC chip + the wire dialog's ADC list update
+                    ycSelectCluster(cid);
+                },
+                error: function (xhr) { E7.ajaxError(xhr); btn.disabled = false; btn.textContent = 'Add'; }
+            });
+        }
+
+
+        // ── Map Card modal: map / re-map / clear all lines of a card at once (like 90 fnEditCardLine) ──
+        var __map = { clusterId: 0, cardId: 0, cardName: '', adcs: [], types: [], assetsByType: {}, lines: [] };
+
+        function ycEnsureMapModal() {
+            if (document.getElementById('mapModal')) return;
+            $('body').append(
+                '<div class="modal fade" id="mapModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-xl"><div class="modal-content">'
+              +   '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-diagram-3 me-2" style="color:var(--co)"></i>Map <span id="mapTitle"></span></h5>'
+              +     '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
+              +   '<div class="modal-body"><div class="map-intro" id="mapIntro"></div>'
+              +     '<div class="map-wrap"><table class="map-tbl"><thead><tr>'
+              +       '<th>Line</th><th>Asset Type</th><th>Asset</th><th>Attribute</th><th>ADC</th><th>Pin</th><th></th>'
+              +     '</tr></thead><tbody id="mapBody"></tbody></table></div></div>'
+              +   '<div class="modal-footer" style="border-top:1px solid var(--bd);padding:10px 18px">'
+              +     '<span class="map-foot-info" id="mapInfo"></span>'
+              +     '<button class="bg7" data-bs-dismiss="modal">Cancel</button>'
+              +     '<button class="be7" id="mapSave" onclick="ycMapSave()">Save mapping</button>'
+              +   '</div>'
+              + '</div></div></div>');
+        }
+
+        function ycOpenMap(cardId) {
+            ensureYcCss(); ycEnsureMapModal();
+            var data = __ycCache[__ycSelId];
+            if (!data) { E7.warn('Reload the cluster first.'); return; }
+            var card = (data.cards || []).filter(function (c) { return c.id === cardId; })[0];
+            if (!card) return;
+            __map = {
+                clusterId: __ycSelId, cardId: cardId, cardName: card.name,
+                adcs: data.adcs || [],
+                types: __siteAssetTypes.map(function (t) { return { id: typeId(t), name: typeName(t) }; }).filter(function (t) { return t.id; }),
+                assetsByType: {}, lines: card.lines || []
+            };
+            __siteAssets.forEach(function (a) { (__map.assetsByType[a.assetTypeId] = __map.assetsByType[a.assetTypeId] || []).push({ id: a.id, name: a.name }); });
+
+            $('#mapTitle').text(__map.cardName + ' — ' + ($('.yc-dh-nm').text() || ''));
+            $('#mapIntro').html('Assign an <b>asset + attribute</b> (and optionally an ADC + pin) to each line of this card. '
+                + 'All changes save together. Leave a line blank to keep it free, or press ✕ to clear a mapping.');
+            $('#mapBody').html('<tr><td colspan="7" style="padding:24px;text-align:center"><div class="e7-spin" style="margin:0 auto"></div></td></tr>');
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('mapModal')).show();
+
+            // Preload attribute sets for the types already used by lines + the first type (for fresh rows)
+            var needed = {};
+            __map.lines.forEach(function (l) { if (l.assetTypeId) needed[l.assetTypeId] = true; });
+            if (__map.types.length) needed[__map.types[0].id] = true;
+            var typeIds = Object.keys(needed).map(Number);
+            var pending = typeIds.length;
+            if (!pending) { ycMapRenderRows(); return; }
+            typeIds.forEach(function (t) { ycEnsureAttrs(t, function () { if (--pending === 0) ycMapRenderRows(); }); });
+        }
+
+        function ycEnsureAttrs(tid, cb) {
+            if (__attrCache[tid]) { cb(); return; }
+            $.ajax({
+                url: '@Url.Action("GetAssetAttributesByTypeId", "Station")', data: { assetTypeId: tid },
+                success: function (res) {
+                    __attrCache[tid] = Array.isArray(res) ? res.map(function (a) { return { id: a.id, title: a.title || ('Attribute ' + a.id), derived: a.isDerived === true }; }) : [];
+                    cb();
+                },
+                error: function (xhr) { __attrCache[tid] = []; cb(); }
+            });
+        }
+
+        function mapOpts(list, selId, ph) {
+            return '<option value="">' + ph + '</option>'
+                 + list.map(function (o) { return '<option value="' + o.id + '"' + (String(o.id) === String(selId) ? ' selected' : '') + '>' + locEsc(o.name != null ? o.name : o.title) + '</option>'; }).join('');
+        }
+
+        function ycMapRenderRows() {
+            var pins = []; for (var i = 1; i <= 10; i++) pins.push({ id: i, name: 'Pin ' + i });
+            var body = __map.lines.map(function (l) {
+                var assets = __map.assetsByType[l.assetTypeId] || [];
+                var attrs = (__attrCache[l.assetTypeId] || []).map(function (a) { return { id: a.id, name: a.title }; });
+                return '<tr data-line-id="' + l.id + '" data-number="' + l.number + '"' + (l.used ? ' class="set"' : '') + '>'
+                     +   '<td class="map-ln">L' + l.number + '</td>'
+                     +   '<td><select class="map-sel map-type" onchange="ycMapTypeChange(this)">' + mapOpts(__map.types, l.assetTypeId || '', 'Type') + '</select></td>'
+                     +   '<td><select class="map-sel map-asset" onchange="ycMapRowTouch(this)">' + mapOpts(assets, l.assetId || '', 'Asset') + '</select></td>'
+                     +   '<td><select class="map-sel map-attr" onchange="ycMapRowTouch(this)">' + mapOpts(attrs, l.attributeId || '', 'Attribute') + '</select></td>'
+                     +   '<td><select class="map-sel map-adc">' + mapOpts(__map.adcs, l.adcId || '', 'ADC') + '</select></td>'
+                     +   '<td><select class="map-sel map-pin">' + mapOpts(pins, l.pin || '', 'Pin') + '</select></td>'
+                     +   '<td><button class="map-clr" title="Clear this line" onclick="ycMapClearRow(this)">✕</button></td>'
+                     + '</tr>';
+            }).join('');
+            $('#mapBody').html(body || '<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--txm)">This card has no lines.</td></tr>');
+            ycMapInfo();
+        }
+
+        function ycMapTypeChange(sel) {
+            var $tr = $(sel).closest('tr');
+            var t = parseInt(sel.value, 10) || 0;
+            $tr.find('.map-asset').html(mapOpts(__map.assetsByType[t] || [], '', 'Asset'));
+            var $attr = $tr.find('.map-attr').html('<option value="">Loading…</option>').prop('disabled', true);
+            if (!t) { $attr.html('<option value="">Attribute</option>').prop('disabled', false); ycMapRowTouch(sel); return; }
+            ycEnsureAttrs(t, function () {
+                $attr.html(mapOpts((__attrCache[t] || []).map(function (a) { return { id: a.id, name: a.title }; }), '', 'Attribute')).prop('disabled', false);
+                ycMapRowTouch(sel);
+            });
+        }
+
+        function ycMapRowTouch(sel) {
+            var $tr = $(sel).closest('tr');
+            var ok = $tr.find('.map-asset').val() && $tr.find('.map-attr').val();
+            $tr.toggleClass('set', !!ok);
+            ycMapInfo();
+        }
+
+        function ycMapClearRow(btn) {
+            $(btn).closest('tr').find('select').val('').end().removeClass('set');
+            ycMapInfo();
+        }
+
+        function ycMapInfo() {
+            var n = 0;
+            $('#mapBody tr[data-line-id]').each(function () { if ($(this).find('.map-asset').val() && $(this).find('.map-attr').val()) n++; });
+            $('#mapInfo').text(n + ' of ' + __map.lines.length + ' line' + (__map.lines.length === 1 ? '' : 's') + ' mapped');
+        }
+
+        function ycMapSave() {
+            var lines = [], err = '';
+            $('#mapBody tr[data-line-id]').each(function () {
+                var $tr = $(this), num = $tr.data('number');
+                var type = parseInt($tr.find('.map-type').val(), 10) || 0;
+                var asset = parseInt($tr.find('.map-asset').val(), 10) || 0;
+                var attr = parseInt($tr.find('.map-attr').val(), 10) || 0;
+                var adc = parseInt($tr.find('.map-adc').val(), 10) || 0;
+                var pin = parseInt($tr.find('.map-pin').val(), 10) || 0;
+                if ((asset || attr) && !(asset && attr && type) && !err) err = 'Line ' + num + ': choose asset type, asset and attribute together (or clear all).';
+                if ((!!adc !== !!pin) && !err) err = 'Line ' + num + ': select both ADC and Pin, or neither.';
+                lines.push({ Id: parseInt($tr.data('line-id'), 10), AssetTypeId: type || null, AssetId: asset || null, AttributeId: attr || null, ADCId: adc || null, Pin: pin || null });
+            });
+            if (err) { E7.warn(err); return; }
+            var $btn = $('#mapSave').prop('disabled', true).text('Saving…');
+            $.ajax({
+                url: '@Url.Action("SaveCardLines", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ SiteId: parseInt(__currentSiteId, 10) || 0, ClusterId: __map.clusterId, CardId: __map.cardId, Lines: lines }),
+                success: function (res) {
+                    $btn.prop('disabled', false).text('Save mapping');
+                    if (!(res && res.success)) { E7.error((res && res.error) || 'Save failed'); return; }
+                    E7.success('Mapping saved for ' + (__map.cardName || 'card'));
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('mapModal')).hide();
+                    delete __ycCache[__map.clusterId];
+                    ycSelectCluster(__map.clusterId);
+                    reloadCardLines(function () {});   // keep the Assets tab in step
+                },
+                error: function (xhr) { $btn.prop('disabled', false).text('Save mapping'); E7.ajaxError(xhr); }
+            });
+        }
+
+        $(function () { $('#ycRefresh').on('click', function () { __ycSite = 0; ycOnOpen(); }); });
+
+        // ── Global loading: one calm top progress bar instead of per-section spinners ──
+        // Shows only if a request takes >180ms, so quick calls never flash. No layout shift.
+        (function () {
+            if (!document.getElementById('e7barCss')) {
+                $('head').append('<style id="e7barCss">#e7bar{position:fixed;top:0;left:0;height:3px;width:0;'
+                  + 'background:linear-gradient(90deg,var(--co),var(--co-hv));box-shadow:0 0 6px rgba(225,99,73,.6);'
+                  + 'z-index:20050;opacity:0;transition:width .3s ease,opacity .35s ease;pointer-events:none}</style>');
+                $('body').append('<div id="e7bar"></div>');
+            }
+            var showT = null, creepT = null;
+            $(document).ajaxStart(function () {
+                clearTimeout(showT);
+                showT = setTimeout(function () {
+                    var $b = $('#e7bar').css({ opacity: 1, width: '30%' });
+                    creepT = setTimeout(function () { $b.css('width', '68%'); }, 400);
+                }, 180);
+            });
+            $(document).ajaxStop(function () {
+                clearTimeout(showT); clearTimeout(creepT);
+                var $b = $('#e7bar');
+                if ($b.css('opacity') === '0') return;   // never shown (all requests were fast)
+                $b.css('width', '100%');
+                setTimeout(function () {
+                    $b.css('opacity', 0);
+                    setTimeout(function () { $b.css('width', 0); }, 350);
+                }, 250);
+            });
+        })();
+
+
+        // ══ SURVEY NMDL UPLOAD ═══════════════════════════════════════════════════════════
+        function loadNMDL(siteId) {
+            siteId = parseInt(siteId, 10) || 0;
+            if (!siteId) { $('#nmdlList').html('<div style="color:var(--txm);font-size:11px">Select a station</div>'); return; }
+            $('#nmdlList').html('<div style="color:var(--txl);font-size:11px">Loading…</div>');
+            $.ajax({
+                url: '@Url.Action("GetNMDL", "Station")', data: { siteId: siteId },
+                success: function (res) {
+                    if (!Array.isArray(res)) { $('#nmdlList').html('<div style="color:var(--err);font-size:11px">' + locEsc((res && res.error) || 'Failed to load') + '</div>'); return; }
+                    renderNMDL(res);
+                },
+                error: function (xhr) { $('#nmdlList').html('<div style="color:var(--err);font-size:11px">Request failed</div>'); }
+            });
+        }
+        function renderNMDL(list) {
+            if (!list.length) { $('#nmdlList').html('<div style="color:var(--txl);font-size:11px">No NMDL documents uploaded yet.</div>'); return; }
+            $('#nmdlList').html('<table class="nmdl-tbl"><tbody>' + list.map(function (x) {
+                return '<tr><td><i class="bi bi-file-earmark-text" style="color:var(--co)"></i> '
+                     +   '<a href="' + (x.url || '#') + '" target="_blank" rel="noopener">' + locEsc(x.name || 'file') + '</a>'
+                     +   (x.category && x.category !== 'NMDL' ? ' <span class="nmdl-cat">' + locEsc(x.category) + '</span>' : '')
+                     +   (x.remarks ? ' <span style="color:var(--txl);font-size:10px">— ' + locEsc(x.remarks) + '</span>' : '') + '</td>'
+                     + '<td style="white-space:nowrap;color:var(--txl);font-size:10px">' + fmtDate(x.createdDate) + '</td>'
+                     + '<td style="text-align:right"><span class="nmdl-del" title="Delete" onclick="deleteNMDL(' + x.id + ')">×</span></td></tr>';
+            }).join('') + '</tbody></table>');
+        }
+        // Picking a file opens the upload dialog (type + remarks) instead of a prompt box.
+        var __nmdlPending = null;
+        function nmdlPicked(input) {
+            var f = input.files && input.files[0]; if (!f) { input.value = ''; return; }
+            if (f.size > 25 * 1024 * 1024) { E7.warn('File is larger than 25 MB.'); input.value = ''; return; }
+            readAsBase64(f, function (b64, ext) {
+                __nmdlPending = { b64: b64, ext: ext, name: f.name };
+                ensureNmdlModal();
+                $('#nmdlFileName').text(f.name);
+                $('#nmdlCategory').val('NMDL');
+                $('#nmdlRemarks').val('');
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('nmdlModal')).show();
+                setTimeout(function () { $('#nmdlRemarks').trigger('focus'); }, 350);
+            });
+            input.value = '';
+        }
+        function nmdlDoUpload(btn) {
+            if (!__nmdlPending) return;
+            var payload = {
+                SiteId: parseInt(__currentSiteId, 10) || 0,
+                Category: $('#nmdlCategory').val() || 'NMDL',
+                OriginalFileName: __nmdlPending.name,
+                Remarks: $('#nmdlRemarks').val() || '',
+                FileBase64: __nmdlPending.b64,
+                FileExtension: __nmdlPending.ext
+            };
+            $(btn).prop('disabled', true).text('Uploading…');
+            $.ajax({
+                url: '@Url.Action("UploadNMDL", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify(payload),
+                success: function (res) {
+                    $(btn).prop('disabled', false).text('Upload');
+                    if (res && res.success) {
+                        E7.success('Document uploaded');
+                        __nmdlPending = null;
+                        bootstrap.Modal.getOrCreateInstance(document.getElementById('nmdlModal')).hide();
+                        loadNMDL(__currentSiteId);
+                    } else E7.error((res && res.error) || 'Upload failed');
+                },
+                error: function (xhr) { $(btn).prop('disabled', false).text('Upload'); E7.ajaxError(xhr); }
+            });
+        }
+        function ensureNmdlModal() {
+            if (document.getElementById('nmdlModal')) return;
+            $('body').append('<div class="modal fade" id="nmdlModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">'
+              + '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-file-earmark-arrow-up me-2" style="color:var(--co)"></i>Upload survey document</h5>'
+              + '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
+              + '<div class="modal-body">'
+              + '<div style="font-size:11px;color:var(--txm);margin-bottom:12px">File: <b id="nmdlFileName"></b></div>'
+              + '<label style="font-size:11px;font-weight:600;margin-bottom:3px">Type</label>'
+              + '<select class="form-select form-select-sm" id="nmdlCategory" style="margin-bottom:12px"><option value="NMDL">NMDL</option><option value="SIP">SIP</option><option value="SMMS">SMMS</option></select>'
+              + '<label style="font-size:11px;font-weight:600;margin-bottom:3px">Remarks <span style="color:var(--txl);font-weight:400">(optional)</span></label>'
+              + '<textarea class="form-control" id="nmdlRemarks" rows="3" placeholder="e.g. filled by SSE"></textarea>'
+              + '</div>'
+              + '<div class="modal-footer" style="border-top:1px solid var(--bd);padding:10px 18px">'
+              + '<button class="bg7" data-bs-dismiss="modal">Cancel</button>'
+              + '<button class="be7" onclick="nmdlDoUpload(this)"><i class="bi bi-upload me-1"></i>Upload</button></div>'
+              + '</div></div></div>');
+        }
+        function deleteNMDL(id) {
+            if (!confirm('Delete this document?')) return;
+            $.ajax({ url: '@Url.Action("DeleteNMDL", "Station")', type: 'POST', data: { id: id },
+                success: function (res) { if (res && res.success) { E7.success('Document deleted'); loadNMDL(__currentSiteId); } else E7.error((res && res.error) || 'Delete failed'); },
+                error: function (xhr) { E7.ajaxError(xhr, 'Delete failed'); } });
+        }
+
+        // ══ LOCATION-WISE PHOTOS ═════════════════════════════════════════════════════════
+        var __photoCluster = 0;
+        function openPhotos(clusterId) {
+            ensureUploadCss(); ensurePhotoModal();
+            __photoCluster = clusterId;
+            var l = (__locations || []).filter(function (x) { return x.id === clusterId; })[0];
+            $('#photoTitle').text('Photos — ' + ((l && l.location) || 'Location'));
+            $('#photoGrid').html('<div style="color:var(--txl);font-size:11px;padding:16px;grid-column:1/-1;text-align:center">Loading…</div>');
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('photoModal')).show();
+            loadPhotos(clusterId);
+        }
+        function loadPhotos(clusterId) {
+            $.ajax({
+                url: '@Url.Action("GetLocationPhotos", "Station")', data: { clusterId: clusterId },
+                success: function (res) {
+                    if (__photoCluster !== clusterId) return;
+                    if (!Array.isArray(res)) { $('#photoGrid').html('<div style="color:var(--err);font-size:11px;padding:16px;grid-column:1/-1">' + locEsc((res && res.error) || 'Failed') + '</div>'); return; }
+                    renderPhotos(res);
+                },
+                error: function (xhr) { $('#photoGrid').html('<div style="color:var(--err);font-size:11px;padding:16px;grid-column:1/-1">Request failed</div>'); }
+            });
+        }
+        function renderPhotos(list) {
+            if (!list.length) { $('#photoGrid').html('<div style="color:var(--txl);font-size:11px;padding:16px;grid-column:1/-1;text-align:center">No photos yet — use “Add photo”.</div>'); return; }
+            $('#photoGrid').html(list.map(function (p) {
+                return '<div class="ph-item"><a href="' + (p.url || '#') + '" target="_blank" rel="noopener"><img src="' + (p.url || '') + '" loading="lazy" alt=""></a>'
+                     + '<span class="ph-del" title="Delete" onclick="deletePhoto(' + p.id + ')">×</span>'
+                     + (p.caption ? '<div class="ph-cap">' + locEsc(p.caption) + '</div>' : '') + '</div>';
+            }).join(''));
+        }
+        function photoPicked(input) {
+            var f = input.files && input.files[0]; if (!f) { return; }
+            var MAX = 15 * 1024 * 1024;
+            if (f.size > MAX) { E7.warn('Photo is larger than 15 MB.'); input.value = ''; return; }
+            readAsBase64(f, function (b64, ext) {
+                var cap = ($('#photoCaption').val() || '').trim();   // caption typed in the dialog
+                $.ajax({
+                    url: '@Url.Action("UploadLocationPhoto", "Station")', type: 'POST', contentType: 'application/json',
+                    data: JSON.stringify({ ClusterId: __photoCluster, SiteId: parseInt(__locSiteId, 10) || parseInt(__currentSiteId, 10) || 0, Caption: cap, OriginalFileName: f.name, FileBase64: b64, FileExtension: ext }),
+                    success: function (res) { if (res && res.success) { E7.success('Photo uploaded'); $('#photoCaption').val(''); loadPhotos(__photoCluster); } else E7.error((res && res.error) || 'Upload failed'); },
+                    error: function (xhr) { E7.ajaxError(xhr); }
+                });
+            });
+            input.value = '';
+        }
+        function deletePhoto(id) {
+            if (!confirm('Delete this photo?')) return;
+            $.ajax({ url: '@Url.Action("DeleteLocationPhoto", "Station")', type: 'POST', data: { id: id },
+                success: function (res) { if (res && res.success) { E7.success('Photo deleted'); loadPhotos(__photoCluster); } else E7.error((res && res.error) || 'Delete failed'); },
+                error: function (xhr) { E7.ajaxError(xhr, 'Delete failed'); } });
+        }
+        function ensurePhotoModal() {
+            if (document.getElementById('photoModal')) return;
+            $('body').append('<div class="modal fade" id="photoModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">'
+              + '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-images me-2" style="color:var(--co)"></i><span id="photoTitle"></span></h5>'
+              + '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
+              + '<div class="modal-body"><div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'
+              + '<input type="text" class="form-control form-control-sm" id="photoCaption" placeholder="Caption (optional)" style="max-width:240px">'
+              + '<input type="file" id="photoFile" accept="image/*" style="display:none" onchange="photoPicked(this)">'
+              + '<button class="be7" onclick="document.getElementById(\'photoFile\').click()"><i class="bi bi-camera me-1"></i>Add photo</button>'
+              + '<span style="font-size:10px;color:var(--txl)">type a caption, then choose a photo</span></div>'
+              + '<div class="ph-grid" id="photoGrid"></div></div>'
+              + '<div class="modal-footer" style="border-top:1px solid var(--bd);padding:10px 18px"><button class="bg7" data-bs-dismiss="modal">Close</button></div>'
+              + '</div></div></div>');
+        }
+
+        // ── shared helpers + styles for the upload features ──
+        function ensureUploadCss() {
+            if (document.getElementById('uploadCss')) return;
+            $('head').append('<style id="uploadCss">'
+              + '.nmdl-tbl{width:100%;border-collapse:collapse}'
+              + '.nmdl-tbl td{padding:6px 6px;border-bottom:1px solid #f0ebe9;font-size:11px}'
+              + '.nmdl-tbl tr:last-child td{border-bottom:none}'
+              + '.nmdl-cat{font-size:9px;background:#eef4fb;color:#2563a8;border:1px solid #cfe0f2;border-radius:8px;padding:0 6px;margin-left:4px}'
+              + '.nmdl-del{cursor:pointer;color:var(--txl);font-weight:700;font-size:14px;padding:0 4px}.nmdl-del:hover{color:var(--err)}'
+              + '.ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}'
+              + '.ph-item{position:relative;border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff}'
+              + '.ph-item img{width:100%;height:110px;object-fit:cover;display:block}'
+              + '.ph-del{position:absolute;top:5px;right:5px;background:rgba(0,0,0,.55);color:#fff;width:20px;height:20px;border-radius:50%;text-align:center;line-height:19px;cursor:pointer;font-size:13px}'
+              + '.ph-del:hover{background:var(--err)}'
+              + '.ph-cap{font-size:10px;padding:4px 7px;color:var(--txm)}'
+              + '</style>');
+        }
+        function readAsBase64(file, cb) {
+            var r = new FileReader();
+            r.onload = function () {
+                var s = r.result || '';
+                var i = ('' + s).indexOf(',');
+                var b64 = i >= 0 ? ('' + s).substring(i + 1) : ('' + s);
+                var dot = file.name.lastIndexOf('.');
+                var ext = dot >= 0 ? file.name.substring(dot) : '';
+                cb(b64, ext);
+            };
+            r.readAsDataURL(file);
+        }
+        function fmtDate(d) {
+            if (!d) return '';
+            try { var dt = new Date(d); if (isNaN(dt.getTime())) return ''; return dt.toLocaleDateString(); } catch (e) { return ''; }
+        }
+        $(function () { ensureUploadCss(); });
 
         // ── Asset type list ───────────────────────────────────────────────────────────
         document.querySelectorAll('.ati').forEach(function(item) {
@@ -1074,10 +1797,13 @@
         function svA(btn) {
             var row = btn.closest('.ar');
             var cardLineId = parseInt(row.getAttribute('data-cardline-id'), 10) || 0;
-            if (!cardLineId) { alert('This attribute has no card line yet. Set it up in Yard Config on the 90 site first.'); return; }
+            if (!cardLineId) { E7.warn('This attribute has no card line yet. Set it up in Yard Config on the 90 site first.'); return; }
 
             var inputs = row.querySelectorAll('.rt-inp');
             var isCur  = row.getAttribute('data-current') === '1';
+            var locInp = row.querySelector('.loc-inp');
+            var locName = locInp ? locInp.value.trim() : '';
+            if (!locName) { E7.warn('Location Name is required'); if (locInp) locInp.focus(); return; }   // 90 ValidateCardLineCircuit
             var rowNo  = inputs[0] ? inputs[0].value.trim() : '';
             function num(i, label) {
                 var t = inputs[i] ? inputs[i].value.trim() : '';
@@ -1088,9 +1814,9 @@
             }
             var trm, third;
             try { trm = num(1, 'Terminal +'); third = num(2, isCur ? 'Sequence no.' : 'Terminal -'); }
-            catch (msg) { alert(msg); return; }
+            catch (msg) { E7.warn(msg); return; }
 
-            var body = { Id: cardLineId, RowNumber: rowNo, TerminalNumberPositive: trm };
+            var body = { Id: cardLineId, LocationName: locName, RowNumber: rowNo, TerminalNumberPositive: trm };
             if (isCur) body.CurrentSequenceNumber = third; else body.TerminalNumberNegative = third;
 
             btn.disabled = true; btn.textContent = '…';
@@ -1101,23 +1827,33 @@
                 data: JSON.stringify(body),
                 success: function (res) {
                     if (res && res.success) {
+                        E7.success('Saved ' + (locName || 'row'));
                         // keep the in-memory CardLine list in step so re-rendering shows saved values
+                        var regroupAssetId = 0;
                         __cardLines.forEach(function (r) {
                             if (r.id === cardLineId) {
+                                if ((r.locationName || '') !== (res.locationName || '')) regroupAssetId = r.assetId;
+                                r.locationName = res.locationName;
                                 r.rowNumber = res.rowNumber;
                                 r.terminalNumberPositive = res.terminalNumberPositive;
                                 r.terminalNumberNegative = res.terminalNumberNegative;
                                 r.currentSequenceNumber = res.currentSequenceNumber;
                             }
                         });
+                        // Rows are grouped by Location Name — a changed location moves the row to its new group
+                        if (regroupAssetId) { loadAttributesForAsset(regroupAssetId); return; }
+                        // show what the API actually stored (blank Row keeps the old one, unused terminal is cleared)
+                        if (inputs[0]) inputs[0].value = res.rowNumber != null ? res.rowNumber : '';
+                        if (inputs[2]) inputs[2].value = (isCur ? res.currentSequenceNumber : res.terminalNumberNegative) != null
+                            ? (isCur ? res.currentSequenceNumber : res.terminalNumberNegative) : '';
                         btn.textContent = '✓'; btn.style.background = 'var(--ok)';
                         setTimeout(function () { btn.textContent = 'Save'; btn.style.background = ''; }, 1500);
                     } else {
-                        alert(res && res.error ? res.error : 'Save failed');
+                        E7.error(res && res.error ? res.error : 'Save failed');
                         btn.textContent = 'Save';
                     }
                 },
-                error: function () { alert('Request failed'); btn.textContent = 'Save'; },
+                error: function (xhr) { E7.ajaxError(xhr); btn.textContent = 'Save'; },
                 complete: function () { btn.disabled = false; }
             });
         }
@@ -1234,7 +1970,15 @@
             });
         }
 
-                        function renderAssetTypeSidebar() {
+        // A station change calls this from three async callbacks in quick succession, which
+        // redrew the asset sidebar three times and made it flicker. Coalesce the burst into
+        // one draw on the next frame, using whatever data has arrived by then.
+        var __sbTimer = null;
+        function renderAssetTypeSidebar() {
+            clearTimeout(__sbTimer);
+            __sbTimer = setTimeout(function () { __sbTimer = null; renderSidebarNow(); }, 45);
+        }
+        function renderSidebarNow() {
             var $list = $('#atList');
             var saved = getSavedTypeIds(__currentSiteId);
             var savedNames = (__savedTypeNamesBySite && __savedTypeNamesBySite[__currentSiteId]) || {};
@@ -1415,15 +2159,12 @@
             loadAttributesForAsset(assets[0].id);
         }
                 function loadAttributesForAsset(assetId) {
+            ensureAssetsCss();
             var records = __cardLines.filter(function (r) { return r.assetId === assetId; });
-            if (!records.length) {
-                $('#modeA').html('<div style="padding:16px;text-align:center;color:var(--txm);font-size:11px">No card lines for this asset yet — '
-                    + 'Row / Terminal can be set once it is wired in Yard Config (90 site). Click the asset to edit its channels.</div>');
-                $('#modeB').html('');
-                return;
-            }
+            if (records.length) $('#selAN').text(records[0].assetName || '');
 
-            $('#selAN').text(records[0].assetName || '');
+            // shared grid column template for headers + rows
+            var AWC = '22px minmax(140px,1.5fr) 150px 60px 60px 74px 66px';
 
             // Group attributes by LocationName (e.g. "TF End", "TR End", or "lc 14")
             var groups = {};
@@ -1438,14 +2179,19 @@
             Object.keys(groups).forEach(function (loc) {
                 var rows   = groups[loc];
                 var grpKey = 'g' + (idx++);
+                var noLoc  = (loc === 'Default');
 
-                html += '<div class="ats">';
-                html +=   '<div class="ats-t">' + loc;
-                html +=     '<label class="stog" style="margin-left:auto">'
+                html += '<div class="aw-grp" style="--awc:' + AWC + '">';
+                html +=   '<div class="aw-ghead">'
+                      +     '<span class="aw-gname"><i class="bi bi-geo-alt"></i>' + locEsc(noLoc ? 'No location set' : loc) + '</span>'
+                      +     '<span class="aw-gcount">' + rows.length + ' line' + (rows.length > 1 ? 's' : '') + '</span>'
+                      +     (noLoc ? '<span class="aw-ghint">— enter a location on each row and Save</span>' : '')
+                      +     '<label class="stog" style="margin-left:auto" title="Enable / disable this group">'
                       +       '<input type="checkbox" checked onchange="togG(this,\'' + grpKey + '\')">'
                       +       '<span class="stog-sl"></span>'
-                      +     '</label>';
-                html +=   '</div>';
+                      +     '</label>'
+                      +   '</div>';
+                html +=   '<div class="aw-cols"><span></span><span class="l">Attribute</span><span class="l">Location</span><span>Row</span><span>+ Trm</span><span>&minus; Trm / Seq</span><span></span></div>';
 
                 rows.forEach(function (r) {
                     var attrName = r.attributeName || '';
@@ -1457,21 +2203,470 @@
                         ? (r.currentSequenceNumber != null ? r.currentSequenceNumber : '')
                         : (r.terminalNumberNegative != null ? r.terminalNumberNegative : '');
 
-                    html += '<div class="ar" data-cardline-id="' + (r.id || '') + '" data-current="' + (isCur ? 1 : 0) + '">'
+                    html += '<div class="ar aw-row" data-cardline-id="' + (r.id || '') + '" data-current="' + (isCur ? 1 : 0) + '">'
                           +   '<input type="checkbox" checked data-g="' + grpKey + '">'
-                          +   '<span class="aname">' + attrName + ' <span style="font-size:9px;color:var(--txl)">' + (isCur ? 'I' : 'V') + '</span></span>'
-                          +   '<input class="rt-inp" placeholder="Row" value="' + row + '">'
+                          +   '<div class="aw-name">'
+                          +     '<div class="aw-attr">' + locEsc(attrName) + ' <span class="aw-vi ' + (isCur ? 'I' : 'V') + '">' + (isCur ? 'I' : 'V') + '</span></div>'
+                          +     wiredTag(r)
+                          +   '</div>'
+                          +   '<input class="loc-inp" placeholder="Location *" title="Location Name (required)" value="' + locEsc(r.locationName) + '">'
+                          +   '<input class="rt-inp" placeholder="Row" value="' + locEsc(row) + '">'
                           +   '<input class="rt-inp" placeholder="+ Trm" title="Terminal +" value="' + trm + '">'
                           +   '<input class="rt-inp" placeholder="' + (isCur ? 'Seq' : '- Trm') + '" title="' + (isCur ? 'Current sequence no.' : 'Terminal -') + '" value="' + third + '">'
-                          +   '<button class="sv-btn" onclick="svA(this)">Save</button>'
+                          +   '<button class="sv-btn" onclick="svA(this)"><i class="bi bi-check-lg"></i>Save</button>'
                           + '</div>';
                 });
 
                 html += '</div>';
             });
 
-            $('#modeA').html(html);
+            if (!records.length)
+                html = '<div class="aw-empty"><i class="bi bi-plug"></i>No card lines for this asset yet.<br>'
+                     + '<span style="font-size:10px;color:var(--txl)">Wire an attribute below to a cluster card line, then set its Location / Row / Terminal.</span></div>';
+            html += '<div id="wireBox"><div style="padding:8px 4px;color:var(--txl);font-size:10px">Loading attributes…</div></div>';
+
+            $('#modeA').html('<div id="wireSum"></div><div class="aw-wrap">' + html + '</div>');
             $('#modeB').html('');   // individual-LOC mode — can populate later if needed
+            renderUnwired(assetId, records);
+        }
+
+        // Where a wired attribute sits: "cluster_1/LOC-1 · C-1 · L3 · ADC1 P2"
+        function wiredTag(r) {
+            var parts = [];
+            if (r.clusterName) parts.push(r.clusterName);
+            if (r.cardName) parts.push(r.cardName);
+            if (r.number) parts.push('L' + r.number);
+            if (r.pin) parts.push((r.sequenceNumber ? 'ADC' + r.sequenceNumber + ' ' : '') + 'P' + r.pin);
+            var txt = parts.join(' · ');
+            return '<div class="aw-wired" title="Wired at: ' + locEsc(txt || 'card line ' + r.id) + '">'
+                 + '<span class="d"></span>' + locEsc(txt || 'Wired') + '</div>';
+        }
+
+        // ── Card-line wiring: attributes of this asset not yet on any card line (90 Yard Config card-line popup) ──
+        var __attrCache  = {};   // assetTypeId → [{id,title}]
+        var __wireAsset  = 0;
+        var __wireClusters = null;   // per station
+        var __wireClustersSite = 0;
+
+        function wireAssetTypeId(assetId, records) {
+            var a = __siteAssets.filter(function (x) { return x.id === assetId; })[0];
+            if (a && a.assetTypeId) return a.assetTypeId;
+            return records.length ? records[0].assetTypeId : 0;
+        }
+
+        function renderUnwired(assetId, records) {
+            __wireAsset = assetId;
+            var typeIdV = wireAssetTypeId(assetId, records);
+            if (!typeIdV) { $('#wireBox').html('<div style="padding:8px 4px;color:var(--err);font-size:10px">Asset type of this asset is unknown — reload the station.</div>'); return; }
+            function draw(attrs) {
+                if (__wireAsset !== assetId) return;   // user moved to another asset meanwhile
+                var wired = {};
+                records.forEach(function (r) { if (r.attributeId) wired[r.attributeId] = true; });
+                // Derived attributes (e.g. "Last Update … sec ago") are calculated, not a physical input — nothing to wire
+                var physical = attrs.filter(function (a) { return !a.derived; });
+                var derivedN = attrs.length - physical.length;
+                var free = physical.filter(function (a) { return !wired[a.id]; });
+                renderWireSummary(records, physical.length, physical.length - free.length);
+
+                if (!attrs.length) {
+                    $('#wireBox').html('<div style="padding:8px 4px;color:var(--warn);font-size:10px">This asset type has no attributes defined, so there is nothing to wire.</div>');
+                    return;
+                }
+                var note = derivedN ? '<div style="padding:7px 14px 0;color:var(--txl);font-size:9px">' + derivedN + ' calculated attribute' + (derivedN > 1 ? 's' : '') + ' (no wiring needed) not listed.</div>' : '';
+                if (!free.length) { $('#wireBox').html(note); return; }
+                var h = '<div class="aw-grp">'
+                      + '<div class="aw-ghead"><span class="aw-gname"><i class="bi bi-plug"></i>Not wired yet</span>'
+                      + '<span class="aw-gcount">' + free.length + ' attribute' + (free.length > 1 ? 's' : '') + '</span></div>';
+                free.forEach(function (a) {
+                    var isCur = (a.title || '').toLowerCase().indexOf('ma') >= 0;
+                    h += '<div class="ar wr aw-un" data-attr-id="' + a.id + '" data-type-id="' + typeIdV + '" data-attr-name="' + locEsc(a.title) + '">'
+                       +   '<span class="nm">' + locEsc(a.title) + ' <span class="aw-vi ' + (isCur ? 'I' : 'V') + '">' + (isCur ? 'I' : 'V') + '</span></span>'
+                       +   '<span class="st">not on any card line</span>'
+                       +   '<button class="wbtn" onclick="openWire(this)"><i class="bi bi-plug"></i> Wire</button>'
+                       + '</div>';
+                });
+                $('#wireBox').html(h + '</div>' + note);
+            }
+            if (__attrCache[typeIdV]) { draw(__attrCache[typeIdV]); return; }
+            $.ajax({
+                url: '@Url.Action("GetAssetAttributesByTypeId", "Station")', data: { assetTypeId: typeIdV },
+                success: function (res) {
+                    if (!Array.isArray(res)) { $('#wireBox').html('<div style="padding:8px 4px;color:var(--err);font-size:10px">' + locEsc((res && res.error) || 'Could not load attributes') + '</div>'); return; }
+                    __attrCache[typeIdV] = res.map(function (a) { return { id: a.id, title: a.title || ('Attribute ' + a.id), derived: a.isDerived === true }; })
+                                              .sort(function (x, y) { return x.title.localeCompare(y.title, undefined, { numeric: true }); });
+                    draw(__attrCache[typeIdV]);
+                },
+                error: function (xhr) { $('#wireBox').html('<div style="padding:8px 4px;color:var(--err);font-size:10px">Could not load attributes</div>'); }
+            });
+        }
+
+        // "Wired 3 of 11 attributes" + which cards this asset uses and how many lines on each
+        // Styles for the wiring summary + Wire dialog live with this feature (not in _Layout),
+        // so they always ship together with the script that uses them.
+        // Styles for the asset wiring schedule (grouped, aligned grid). Ships with the script.
+        function ensureAssetsCss() {
+            if (document.getElementById('assetsCss')) return;
+            var css = ''
+              + '.aw-wrap{display:flex;flex-direction:column;gap:12px}'
+              + '.aw-grp{background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden}'
+              + '.aw-ghead{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--co-lt);border-bottom:1px solid var(--bd)}'
+              + '.aw-gname{font-size:12px;font-weight:700;color:var(--tx);display:flex;align-items:center;gap:6px}'
+              + '.aw-gname .bi{color:var(--co)}'
+              + '.aw-gcount{font-size:10px;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:1px 9px;color:var(--txm)}'
+              + '.aw-ghint{font-size:10px;color:var(--txm);font-weight:400}'
+              + '.aw-cols{display:grid;grid-template-columns:var(--awc);gap:8px;padding:6px 14px 5px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--txl);border-bottom:1px solid #f0ebe9}'
+              + '.aw-cols span{text-align:center}.aw-cols span.l{text-align:left}'
+              + '.ar.aw-row{display:grid;grid-template-columns:var(--awc);gap:8px;align-items:center;padding:7px 14px;border-bottom:1px solid #f4efed;font-size:11px;transition:background .1s}'
+              + '.ar.aw-row:last-child{border-bottom:none}'
+              + '.ar.aw-row:hover{background:#fbf9f8}'
+              + '.aw-name{min-width:0}'
+              + '.aw-attr{font-weight:600;color:var(--tx);display:flex;align-items:center;gap:5px}'
+              + '.aw-vi{font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;line-height:1.2}'
+              + '.aw-vi.I{background:#fdece8;color:#c0392b}.aw-vi.V{background:#e8f1fa;color:#2471a3}'
+              + '.aw-wired{font-size:9px;color:#1e7a4f;font-family:ui-monospace,Consolas,monospace;margin-top:2px;display:inline-flex;align-items:center;gap:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+              + '.aw-wired .d{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0}'
+              + '.ar.aw-row .loc-inp,.ar.aw-row .rt-inp{width:100%;height:30px;border:1px solid var(--bd);border-radius:6px;padding:2px 8px;font-size:11px;background:#fff;transition:.12s}'
+              + '.ar.aw-row .rt-inp{text-align:center;padding:2px 4px}'
+              + '.ar.aw-row .loc-inp::placeholder{color:var(--txl)}'
+              + '.ar.aw-row .loc-inp:focus,.ar.aw-row .rt-inp:focus{border-color:var(--co);outline:none;box-shadow:0 0 0 2px var(--co-lt)}'
+              + '.ar.aw-row>input[type=checkbox]{width:15px;height:15px;accent-color:var(--co);cursor:pointer}'
+              + '.ar.aw-row .sv-btn{height:30px;background:var(--ok);border:none;color:#fff;font-size:10px;font-weight:600;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;transition:.12s}'
+              + '.ar.aw-row .sv-btn:hover{filter:brightness(1.06)}'
+              + '.aw-un{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #f4efed;font-size:11px}'
+              + '.aw-un:last-child{border-bottom:none}.aw-un:hover{background:#fbf9f8}'
+              + '.aw-un .nm{font-weight:600;color:var(--tx);display:flex;align-items:center;gap:5px}'
+              + '.aw-un .st{font-size:10px;color:var(--txl)}'
+              + '.aw-un .wbtn{margin-left:auto;background:var(--co);border:none;color:#fff;font-size:10px;font-weight:600;padding:5px 14px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:.12s}'
+              + '.aw-un .wbtn:hover{background:var(--co-hv)}'
+              + '.aw-empty{padding:28px 16px;text-align:center;color:var(--txm);font-size:11px;background:var(--sf);border:1px dashed var(--bd);border-radius:10px}'
+              + '.aw-empty .bi{font-size:26px;color:var(--bd);display:block;margin-bottom:8px}';
+            $('head').append('<style id="assetsCss">' + css + '</style>');
+        }
+
+        function ensureWireCss() {
+            if (document.getElementById('wireCss')) return;
+            var css = ''
+              + '.wsum{border:1px solid var(--bd);background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:10px}'
+              + '.wsum-bar{flex:1;max-width:260px;height:6px;background:#efe9e6;border-radius:3px;overflow:hidden}'
+              + '.wsum-bar>i{display:block;height:100%;background:var(--ok)}'
+              + '.wsum-chip{font-size:10px;border:1px solid #bfe3cf;background:#e7f5ee;color:#1e7a4f;border-radius:10px;padding:1px 8px}'
+              + '.wsum-chip b{margin-left:3px}'
+              + '#wireModal .modal-header{background:var(--co-lt);border-bottom:1px solid var(--bd);padding:12px 18px}'
+              + '#wireModal .modal-title{font-size:14px;font-weight:600}'
+              + '#wireModal .modal-body{padding:16px 18px}'
+              + '.wm-step{margin-bottom:16px}'
+              + '.wm-lbl{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--tx);margin-bottom:7px;text-transform:uppercase;letter-spacing:.3px}'
+              + '.wm-lbl .no{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--co);color:#fff;font-size:10px}'
+              + '.wm-hint{font-size:10px;font-weight:400;color:var(--txl);text-transform:none;letter-spacing:0}'
+              + '.wm-grid{display:flex;flex-wrap:wrap;gap:8px}'
+              + '.wm-card{position:relative;border:1px solid var(--bd);border-left-width:4px;border-radius:7px;padding:7px 12px;min-width:110px;cursor:pointer;background:#fff;font-size:11px;transition:.12s}'
+              + '.wm-card:hover{box-shadow:0 2px 6px rgba(0,0,0,.08);transform:translateY(-1px)}'
+              + '.wm-card.k-I{border-left-color:#e16349}.wm-card.k-V{border-left-color:#2980b9}.wm-card.k-DI{border-left-color:#8e44ad}.wm-card.k-M{border-left-color:#ba7517}'
+              + '.wm-card.on{background:var(--co-lt);box-shadow:0 0 0 2px var(--co)}'
+              + '.wm-card.full{opacity:.55;cursor:not-allowed}'
+              + '.wm-card .nm{font-weight:700;font-size:12px}'
+              + '.wm-card .kb{position:absolute;top:6px;right:8px;font-size:9px;font-weight:700;color:var(--txl)}'
+              + '.wm-card .ct{font-size:10px;color:var(--txm);margin-top:1px}'
+              + '.wm-card .bar{height:4px;background:#efe9e6;border-radius:2px;margin-top:5px;overflow:hidden}'
+              + '.wm-card .bar>i{display:block;height:100%;background:var(--ok)}'
+              + '.wm-card.wm-add{border-style:dashed;border-left-width:1px;color:var(--co);cursor:default;background:#fffdfc}'
+              + '.wm-card.wm-add:hover{transform:none}'
+              + '.wm-line{width:48px;height:32px;border:1px solid var(--bd);border-radius:6px;background:#fff;font-size:11px;font-weight:600;cursor:pointer;color:var(--tx);transition:.1s}'
+              + '.wm-line:hover:not(:disabled){border-color:var(--co);color:var(--co)}'
+              + '.wm-line.used{background:#f1eeec;color:#b9aea9;cursor:not-allowed;text-decoration:line-through;font-weight:400}'
+              + '.wm-line.on{background:var(--co);color:#fff;border-color:var(--co)}'
+              + '.wm-legend{display:flex;gap:12px;margin-top:6px;font-size:10px;color:var(--txm)}'
+              + '.wm-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;border:1px solid var(--bd);margin-right:4px;vertical-align:-1px}'
+              + '#wmSummary{font-size:12px;padding:9px 12px;border-radius:7px;background:var(--co-lt);border:1px solid var(--bd)}'
+              + '#wmSummary .warn{color:var(--warn);font-size:11px;margin-top:4px}'
+              + '#wmSummary .err{color:var(--err);font-size:11px;margin-top:4px}'
+              + '#wireModal .be7:disabled{opacity:.45;cursor:not-allowed}';
+            $('head').append('<style id="wireCss">' + css + '</style>');
+        }
+
+        // Card kind from its name: C-n current, V5/V82 voltage, DI digital, MintCard
+        function wmCardKind(name) {
+            var n = (name || '').toUpperCase();
+            if (n.indexOf('C-') === 0) return 'I';
+            if (n.indexOf('DI-') === 0) return 'DI';
+            if (n.indexOf('MINTCARD-') === 0) return 'M';
+            return 'V';
+        }
+        function wmAttrKind(title) { return (title || '').toLowerCase().indexOf('ma') >= 0 ? 'I' : 'V'; }
+
+        function renderWireSummary(records, total, done) {
+            ensureWireCss();
+            if (!total) { $('#wireSum').html(''); return; }
+            var pct = Math.round(done * 100 / total);
+            var perCard = {};
+            records.forEach(function (r) {
+                var k = (r.clusterName || 'cluster ?') + ' · ' + (r.cardName || 'card ?');
+                perCard[k] = (perCard[k] || 0) + 1;
+            });
+            var chips = Object.keys(perCard).sort().map(function (k) {
+                return '<span class="wsum-chip" title="' + perCard[k] + ' line' + (perCard[k] > 1 ? 's' : '') + ' of this asset on ' + locEsc(k) + '">'
+                     + locEsc(k) + ' <b>' + perCard[k] + '</b></span>';
+            }).join('');
+            $('#wireSum').html(
+                '<div class="wsum">'
+              +   '<div style="display:flex;align-items:center;gap:10px">'
+              +     '<b style="font-size:12px">Wired ' + done + ' of ' + total + ' attributes</b>'
+              +     '<div class="wsum-bar"><i style="width:' + pct + '%"></i></div>'
+              +     '<span style="font-size:10px;color:var(--txm)">' + (total - done) + ' left</span>'
+              +   '</div>'
+              +   (chips ? '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;align-items:center"><span style="font-size:10px;color:var(--txm)">Cards used:</span>' + chips + '</div>'
+                         : '<div style="margin-top:4px;font-size:10px;color:var(--txl)">Not on any card yet — click Wire on an attribute below.</div>')
+              + '</div>');
+        }
+
+        // ── Wire dialog: 1 Cluster → 2 Card (used/total) → 3 Line grid → 4 ADC/Pin (optional) ──
+        var __wm = { assetId: 0, attrId: 0, typeId: 0, attrName: '', clusterId: 0, cards: [], cardId: 0, lineId: 0 };
+        var __wmLast = { siteId: 0, clusterId: 0, cardId: 0 };
+
+        function ensureWireModal() {
+            ensureWireCss();
+            if (document.getElementById('wireModal')) return;
+            var pins = '<option value="">Pin</option>';
+            for (var i = 1; i <= 10; i++) pins += '<option value="' + i + '">Pin ' + i + '</option>';
+            $('body').append(
+                '<div class="modal fade" id="wireModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-lg"><div class="modal-content">'
+              +   '<div class="modal-header"><h5 class="modal-title"><i class="bi bi-diagram-3 me-2" style="color:var(--co)"></i>Wire <span id="wmTitle"></span></h5>'
+              +     '<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>'
+              +   '<div class="modal-body">'
+              +     '<div class="wm-step"><div class="wm-lbl"><span class="no">1</span>Cluster</div><select class="form-select form-select-sm" id="wmCluster" onchange="wmPickCluster(this.value)"></select></div>'
+              +     '<div class="wm-step"><div class="wm-lbl"><span class="no">2</span>Card <span id="wmCardInfo" class="wm-hint"></span></div><div id="wmCards" class="wm-grid"><span class="wm-hint">Select a cluster first</span></div></div>'
+              +     '<div class="wm-step"><div class="wm-lbl"><span class="no">3</span>Line <span id="wmLineInfo" class="wm-hint"></span></div><div id="wmLines" class="wm-grid"><span class="wm-hint">Select a card first</span></div>'
+              +       '<div class="wm-legend"><span><i></i>Free</span><span><i style="background:var(--co);border-color:var(--co)"></i>Selected</span><span><i style="background:#f1eeec"></i>Used (hover to see by whom)</span></div></div>'
+              +     '<div class="wm-step"><div class="wm-lbl"><span class="no">4</span>ADC / Pin <span class="wm-hint">optional — pick both or neither</span></div>'
+              +       '<div style="display:flex;gap:8px;max-width:360px"><select class="form-select form-select-sm" id="wmAdc" onchange="wmSummary()"><option value="">No ADC</option></select>'
+              +       '<select class="form-select form-select-sm" id="wmPin" onchange="wmSummary()">' + pins + '</select></div></div>'
+              +     '<div id="wmSummary"></div>'
+              +   '</div>'
+              +   '<div class="modal-footer" style="border-top:1px solid var(--bd);padding:10px 18px">'
+              +     '<span id="wmLeft" class="wm-hint" style="margin-right:auto"></span>'
+              +     '<button class="bg7" data-bs-dismiss="modal">Cancel</button>'
+              +     '<button class="bg7" id="wmSaveNext" onclick="saveWire(true)" disabled title="Wire this one and open the next unwired attribute on the same card">Wire &amp; next</button>'
+              +     '<button class="be7" id="wmSave" onclick="saveWire(false)" disabled>Wire</button>'
+              +   '</div>'
+              + '</div></div></div>');
+        }
+
+        function openWire(btn) {
+            ensureWireModal();
+            var $row = $(btn).closest('.ar');
+            __wm = {
+                assetId: __wireAsset,
+                attrId: parseInt($row.data('attr-id'), 10) || 0,
+                typeId: parseInt($row.data('type-id'), 10) || 0,
+                attrName: $row.attr('data-attr-name') || $row.find('.aname').text(),
+                clusterId: 0, cards: [], cardId: 0, lineId: 0
+            };
+            $('#wmTitle').text(__wm.attrName + ' — ' + ($('#selAN').text() || ''));
+            var leftN = $('#wireBox .wr').length;
+            $('#wmLeft').text(leftN ? leftN + ' attribute' + (leftN > 1 ? 's' : '') + ' of this asset still to wire' : '');
+            $('#wmCards').html('<span class="wm-hint">Select a cluster first</span>');
+            $('#wmLines').html('<span class="wm-hint">Select a card first</span>');
+            $('#wmCardInfo, #wmLineInfo').text('');
+            $('#wmAdc').html('<option value="">No ADC</option>'); $('#wmPin').val('');
+            wmSummary();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('wireModal')).show();
+
+            $('#wmCluster').html('<option value="">Loading…</option>');
+            $.ajax({
+                url: '@Url.Action("GetWireClusters", "Station")', data: { siteId: __currentSiteId },
+                success: function (res) {
+                    if (!Array.isArray(res)) { $('#wmCluster').html('<option value="">' + locEsc((res && res.error) || 'Could not load clusters') + '</option>'); return; }
+                    if (!res.length) { $('#wmCluster').html('<option value="">No clusters — add a location first (Location tab)</option>'); return; }
+                    $('#wmCluster').html('<option value="">Select cluster…</option>' + res.map(function (c) {
+                        return '<option value="' + c.id + '">' + locEsc(c.name) + '  (' + (c.wired || 0) + ' line' + (c.wired === 1 ? '' : 's') + ' wired)</option>';
+                    }).join(''));
+                    // reopen on the cluster / card used last time on this station
+                    var last = __wmLast.siteId === __currentSiteId && res.some(function (c) { return c.id === __wmLast.clusterId; }) ? __wmLast.clusterId : 0;
+                    if (!last && res.length === 1) last = res[0].id;
+                    if (last) { $('#wmCluster').val(String(last)); wmPickCluster(last, __wmLast.cardId); }
+                }
+            });
+        }
+
+        function wmPickCluster(clusterId, preferCardId) {
+            __wm.clusterId = parseInt(clusterId, 10) || 0;
+            __wm.cards = []; __wm.cardId = 0; __wm.lineId = 0;
+            $('#wmLines').html('<span class="wm-hint">Select a card first</span>'); $('#wmLineInfo').text('');
+            $('#wmAdc').html('<option value="">No ADC</option>');
+            wmSummary();
+            if (!__wm.clusterId) { $('#wmCards').html('<span class="wm-hint">Select a cluster first</span>'); $('#wmCardInfo').text(''); return; }
+            $('#wmCards').html('<span class="wm-hint">Loading cards…</span>');
+            var cid = __wm.clusterId;
+            $.ajax({
+                url: '@Url.Action("GetWireCards", "Station")', data: { clusterId: cid },
+                success: function (res) {
+                    if (cid !== __wm.clusterId) return;
+                    if (!res || res.error) { $('#wmCards').html('<span class="wm-hint" style="color:var(--err)">' + locEsc((res && res.error) || 'Could not load cards') + '</span>'); return; }
+                    __wm.cards = res.cards || [];
+                    $('#wmAdc').html('<option value="">No ADC</option>' + (res.adcs || []).map(function (a) { return '<option value="' + a.id + '">' + locEsc(a.name) + '</option>'; }).join(''));
+                    renderWmCards();
+                    // Pre-select: the card asked for (last used / just added), else the first card of the
+                    // attribute's kind (C for mA, voltage card for V) that still has a free line
+                    var hasFree = function (c) { return c.used < c.total; };
+                    var want = wmAttrKind(__wm.attrName);
+                    var pick = __wm.cards.filter(function (c) { return c.id === preferCardId && hasFree(c); })[0]
+                            || __wm.cards.filter(function (c) { return wmCardKind(c.name) === want && hasFree(c); })[0];
+                    if (pick) wmPickCard(pick.id);
+                    else if (__wm.cards.length) $('#wmLines').html('<span class="wm-hint">No free ' + (want === 'I' ? 'current (C)' : 'voltage') + ' card here — pick another card or add one</span>');
+                }
+            });
+        }
+
+        function renderWmCards() {
+            var cards = __wm.cards;
+            var used = 0, total = 0;
+            cards.forEach(function (c) { used += c.used; total += c.total; });
+            $('#wmCardInfo').text(cards.length ? cards.length + ' card' + (cards.length > 1 ? 's' : '') + ' · ' + used + ' / ' + total + ' lines used'
+                                               : 'this cluster has no cards yet — add one →');
+            var want = wmAttrKind(__wm.attrName);
+            var kindLbl = { I: 'CURRENT', V: 'VOLTAGE', DI: 'DIGITAL', M: 'MINT' };
+            var html = cards.map(function (c) {
+                var pct = c.total ? Math.round(c.used * 100 / c.total) : 0;
+                var full = c.total && c.used >= c.total;
+                var k = wmCardKind(c.name);
+                return '<div class="wm-card k-' + k + (c.id === __wm.cardId ? ' on' : '') + (full ? ' full' : '') + '" '
+                     +   (full ? '' : 'onclick="wmPickCard(' + c.id + ')" ')
+                     +   'title="' + locEsc(c.name) + ' (' + kindLbl[k].toLowerCase() + ' card): ' + c.used + ' of ' + c.total + ' lines used' + (full ? ' — full' : '') + '">'
+                     +   '<span class="kb">' + kindLbl[k] + (k === want ? ' ✓' : '') + '</span>'
+                     +   '<div class="nm">' + locEsc(c.name) + '</div>'
+                     +   '<div class="ct">' + (c.total - c.used) + ' free · ' + c.used + '/' + c.total + ' used' + (full ? ' · full' : '') + '</div>'
+                     +   '<div class="bar"><i style="width:' + pct + '%"></i></div>'
+                     + '</div>';
+            }).join('');
+            var types = ['C', 'V5', 'V82', 'MintCard', 'DI'].map(function (t) {
+                return '<option value="' + t + '"' + ((want === 'I' ? 'C' : 'V5') === t ? ' selected' : '') + '>' + t + '</option>';
+            }).join('');
+            html += '<div class="wm-card wm-add" title="Add the next card of this type to the cluster (the API creates its empty lines)">'
+                  +   '<div class="nm">+ Add card</div>'
+                  +   '<div style="display:flex;gap:4px;margin-top:4px"><select id="wmCardType" class="form-select form-select-sm" style="width:96px;font-size:11px;padding:1px 24px 1px 6px">' + types + '</select>'
+                  +   '<button class="be7" style="padding:3px 10px" onclick="wmAddCard(this)">Add</button></div>'
+                  + '</div>';
+            $('#wmCards').html(html);
+        }
+
+        function wmPickCard(cardId) {
+            __wm.cardId = cardId; __wm.lineId = 0;
+            renderWmCards();
+            var card = __wm.cards.filter(function (c) { return c.id === cardId; })[0];
+            if (!card) return;
+            var free = card.lines.filter(function (l) { return !l.used; });
+            $('#wmLineInfo').text(free.length + ' free of ' + card.lines.length + (free.length ? ' · first free line is pre-selected' : ' — card is full, pick or add another card'));
+            $('#wmLines').html(card.lines.map(function (l) {
+                var who = l.used ? ((l.assetName || 'in use') + (l.attributeName ? ' · ' + l.attributeName : '')) : 'Free';
+                return '<button type="button" class="wm-line' + (l.used ? ' used' : '') + '" data-line="' + l.id + '" '
+                     + (l.used ? 'disabled ' : 'onclick="wmPickLine(' + l.id + ')" ')
+                     + 'title="Line ' + l.number + ': ' + locEsc(who) + '">L' + l.number + '</button>';
+            }).join('') || '<span class="wm-hint">This card has no lines</span>');
+            if (free.length) wmPickLine(free[0].id);
+            else wmSummary();
+        }
+
+        function wmPickLine(lineId) {
+            __wm.lineId = lineId;
+            $('#wmLines .wm-line').removeClass('on');
+            $('#wmLines .wm-line[data-line="' + lineId + '"]').addClass('on');
+            wmSummary();
+        }
+
+        function wmSummary() {
+            var cl = $('#wmCluster option:selected').text().replace(/\s+\(.*\)$/, '');
+            var card = __wm.cards.filter(function (c) { return c.id === __wm.cardId; })[0];
+            var line = card && card.lines.filter(function (l) { return l.id === __wm.lineId; })[0];
+            var adc = $('#wmAdc').val(), pin = $('#wmPin').val();
+            var ok = !!line && (!!adc === !!pin);
+            $('#wmSave, #wmSaveNext').prop('disabled', !ok);
+            $('#wmSaveNext').toggle($('#wireBox .wr').length > 1);   // only when another attribute is waiting
+            if (!line) { $('#wmSummary').html('<span style="color:var(--txm)">Pick a cluster, a card and a free line.</span>'); return; }
+            var where = '<b>' + locEsc(cl) + '</b> · <b>' + locEsc(card.name) + '</b> · <b>Line ' + line.number + '</b>'
+                      + (adc && pin ? ' · ' + locEsc($('#wmAdc option:selected').text()) + ' Pin ' + pin : '');
+            var want = wmAttrKind(__wm.attrName), got = wmCardKind(card.name);
+            var warn = (want === 'I' && got !== 'I') ? 'This is a current (mA) attribute but ' + locEsc(card.name) + ' is not a C (current) card.'
+                     : (want === 'V' && got === 'I') ? 'This is a voltage attribute but ' + locEsc(card.name) + ' is a C (current) card.' : '';
+            $('#wmSummary').html('<b>' + locEsc(__wm.attrName) + '</b> → ' + where
+                + (warn ? '<div class="warn">⚠ ' + warn + ' You can still wire it if that is how it is connected.</div>' : '')
+                + (!!adc !== !!pin ? '<div class="err">Select both ADC and Pin, or neither.</div>' : ''));
+        }
+
+        function wmAddCard(btn) {
+            var ct = $('#wmCardType').val();
+            if (!__wm.clusterId) return;
+            if (!confirm('Add a new ' + ct + ' card (with its empty lines) to this cluster? This is saved immediately.')) return;
+            btn.disabled = true; btn.textContent = '…';
+            var cid = __wm.clusterId;
+            $.ajax({
+                url: '@Url.Action("AddClusterCard", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ SiteId: parseInt(__currentSiteId, 10) || 0, ClusterId: cid, CardType: ct }),
+                success: function (res) {
+                    if (!(res && res.success)) { E7.error((res && res.error) || 'Could not add card'); btn.disabled = false; btn.textContent = 'Add'; return; }
+                    E7.success(ct + ' card added');
+                    wmPickCluster(cid, res.cardId);   // reload tiles with counts and select the new card
+                },
+                error: function (xhr) { E7.ajaxError(xhr); btn.disabled = false; btn.textContent = 'Add'; }
+            });
+        }
+
+        // next = true → after saving, open the next unwired attribute on the same cluster / card
+        function saveWire(next) {
+            var assetId = __wm.assetId;
+            var body = {
+                SiteId: parseInt(__currentSiteId, 10) || 0,
+                ClusterId: __wm.clusterId, CardId: __wm.cardId, CardLineId: __wm.lineId,
+                AssetTypeId: __wm.typeId, AssetId: assetId, AttributeId: __wm.attrId,
+                ADCId: parseInt($('#wmAdc').val(), 10) || null,
+                Pin: parseInt($('#wmPin').val(), 10) || null
+            };
+            if (!body.CardLineId) { E7.warn('Select cluster, card and line'); return; }
+            if (!!body.ADCId !== !!body.Pin) { E7.warn('Select both ADC and Pin, or neither'); return; }
+            var $btns = $('#wmSave, #wmSaveNext').prop('disabled', true);
+            var $btn = next ? $('#wmSaveNext') : $('#wmSave');
+            var label = $btn.text();
+            $btn.text('Saving…');
+            var wiredAttrId = __wm.attrId;
+            $.ajax({
+                url: '@Url.Action("WireCardLine", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify(body),
+                success: function (res) {
+                    $btn.text(label);
+                    if (!(res && res.success)) { E7.error((res && res.error) || 'Wire failed'); $btns.prop('disabled', false); return; }
+                    E7.success('Line wired');
+                    __wmLast = { siteId: __currentSiteId, clusterId: __wm.clusterId, cardId: __wm.cardId };
+                    if (!next) bootstrap.Modal.getOrCreateInstance(document.getElementById('wireModal')).hide();
+                    reloadCardLines(function () {
+                        if (__wireAsset !== assetId) return;
+                        loadAttributesForAsset(assetId);
+                        // briefly highlight the newly wired row so it is easy to spot
+                        var $new = $('#modeA .ar[data-cardline-id="' + res.id + '"]');
+                        $new.css({ background: '#e7f5ee', transition: 'background 1.5s' });
+                        if ($new[0] && !next) $new[0].scrollIntoView({ block: 'nearest' });
+                        setTimeout(function () { $new.css('background', ''); }, 2500);
+                        if (next) {
+                            // attribute list is cached, so #wireBox is already redrawn without the one just wired
+                            var $nextRow = $('#wireBox .wr').filter(function () { return parseInt($(this).data('attr-id'), 10) !== wiredAttrId; }).first();
+                            if ($nextRow.length) openWire($nextRow.find('button')[0]);
+                            else bootstrap.Modal.getOrCreateInstance(document.getElementById('wireModal')).hide();
+                        }
+                    });
+                },
+                error: function (xhr) { $btn.text(label); $btns.prop('disabled', false); E7.ajaxError(xhr); }
+            });
+        }
+
+        // Refresh __cardLines without re-rendering the sidebar (keeps the current type / asset selected)
+        function reloadCardLines(done) {
+            var siteId = __currentSiteId;
+            $.ajax({
+                url: '@Url.Action("GetCardLineBySiteId", "Station")', data: { siteId: siteId },
+                success: function (data) {
+                    if (siteId !== __currentSiteId) return;
+                    if (data && Array.isArray(data.records)) __cardLines = data.records;
+                    if (done) done();
+                }
+            });
         }
                 function selectAsset(el, assetId) {
             $('#trackList .air, #trackList .fot-parent, #trackList .fot-child').removeClass('sel');
@@ -1498,7 +2693,7 @@
             __modalAssetId       = assetId || null;
 
             if (!__modalAssetTypeId || !__currentSiteId) {
-                alert('Please select a station and asset type first.');
+                E7.warn('Please select a station and asset type first.');
                 return;
             }
 
@@ -1561,7 +2756,7 @@
                         $('#assetConfigBody').html('<tr><td colspan="4" style="text-align:center;color:var(--err)">Failed to load attributes</td></tr>');
                     }
                 },
-                error: function () {
+                error: function (xhr) {
                     $('#assetConfigBody').html('<tr><td colspan="4" style="text-align:center;color:var(--err)">Request failed</td></tr>');
                 }
             });
@@ -1718,7 +2913,7 @@
         // ── Save from modal → POST to /Station/SaveAsset ──────────────────────
         function saveAssetFromModal() {
             var name = $('#assetModalName').val().trim();
-            if (!name) { $('#assetModalName').focus(); return; }
+            if (!name) { E7.warn('Enter the asset name'); $('#assetModalName').focus(); return; }
 
             // Build mAssetInfos — same structure as old site's fnSaveAsset
             var mAssetInfos = [];
@@ -1779,6 +2974,7 @@
                 success: function (res) {
                     if (res && res.success) {
                         $saveBtn.text('✓ Saved');
+                        E7.success('Asset "' + name + '" saved');
                         setTimeout(function () {
                             bootstrap.Modal.getInstance(document.getElementById('addAssetModal')).hide();
                             $saveBtn.prop('disabled', false).text('Save');
@@ -1791,12 +2987,12 @@
                             });
                         }, 900);
                     } else {
-                        alert(res && res.error ? res.error : 'Error saving asset.');
+                        E7.error(res && res.error ? res.error : 'Error saving asset.');
                         $saveBtn.prop('disabled', false).text('Save');
                     }
                 },
-                error: function () {
-                    alert('Request failed.');
+                error: function (xhr) {
+                    E7.ajaxError(xhr);
                     $saveBtn.prop('disabled', false).text('Save');
                 }
             });
@@ -1819,6 +3015,7 @@
             __savedTypeNamesBySite[__currentSiteId] = selectedNames;
 
             renderAssetTypeSidebar();
+            E7.success('Asset types updated');
 
             var oc = bootstrap.Offcanvas.getInstance(document.getElementById('addTypeOC'));
             if (oc) oc.hide();

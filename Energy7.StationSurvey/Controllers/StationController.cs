@@ -248,12 +248,12 @@ namespace Energy7.StationSurvey.Controllers
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
                 using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser!.Token);
-                var response = await hcf.Client.GetAsync($"AssetAttribute/GetAllAssetAttributeByAssetTypeId/{assetTypeId}");
-                if (response.StatusCode == HttpStatusCode.OK)
-                {
-                    var json = await response.Content.ReadAsStringAsync();
-                    attributes = JsonConvert.DeserializeObject<List<AssetAttribute>>(json) ?? new();
-                }
+                // Same API route as 90 Yard Config card-line popup (AssetAttributeService.GetBy)
+                var response = await hcf.Client.GetAsync($"AssetAttribute/AssetTypeId/{assetTypeId}");
+                if (response.StatusCode != HttpStatusCode.OK)
+                    return Json(new { error = "Could not load attributes for this asset type." });
+                var json = await response.Content.ReadAsStringAsync();
+                attributes = JsonConvert.DeserializeObject<List<AssetAttribute>>(json) ?? new();
             }
             catch (Exception ex) { return Json(new { error = ex.Message }); }
             return Json(attributes);
@@ -445,7 +445,7 @@ namespace Energy7.StationSurvey.Controllers
 
                 using var str = new StringContent(JsonConvert.SerializeObject(row), Encoding.UTF8, "application/json");
                 var response = await hcf.Client.PostAsync("SiteSurvey", str);
-                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = "Internal server error." });
+                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(response) });
                 return Json(new { success = true });
             }
             catch (Exception ex) { return Json(new { error = ex.Message }); }
@@ -464,10 +464,24 @@ namespace Energy7.StationSurvey.Controllers
 
                 // API SiteSurvey delete removes the row (no soft delete) — same as the 90 page
                 var response = await hcf.Client.DeleteAsync($"SiteSurvey/{id}");
-                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = "Internal server error." });
+                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(response) });
                 return Json(new { success = true });
             }
             catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        // API returns validation errors as 400 with the message as a JSON string body ("\"Signal: ...\"")
+        private static async Task<string> ApiErrorMessage(HttpResponseMessage response)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrWhiteSpace(body)) return "Internal server error.";
+            try
+            {
+                var msg = JsonConvert.DeserializeObject(body);
+                if (msg is string s && !string.IsNullOrWhiteSpace(s)) return s;
+            }
+            catch (JsonException) { }
+            return response.StatusCode == HttpStatusCode.BadRequest ? body.Trim('"') : "Internal server error.";
         }
 
         // ── AJAX: Locations = Cluster rows named "cluster_{RF no}/{location}" (90 Yard Config model) ──
@@ -715,11 +729,12 @@ namespace Energy7.StationSurvey.Controllers
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
                 if (loginUser == null) return Json(new { error = "Session expired." });
                 if (mCardLine == null || mCardLine.Id <= 0) return Json(new { error = "Card line not found." });
+                // 90 ValidateCardLineCircuit: Location Name is required
+                if (string.IsNullOrWhiteSpace(mCardLine.LocationName)) return Json(new { error = "Location Name is required." });
 
                 using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
 
-                // UpdateLocation always overwrites TerminalNumberNegative and CurrentSequenceNumber,
-                // so start from the stored card line and change only Row / Terminal(+).
+                // Start from the stored card line so the API gets its AssetId / AttributeName etc.
                 var getResponse = await hcf.Client.GetAsync($"CardLine/Id/{mCardLine.Id}");
                 if (getResponse.StatusCode != HttpStatusCode.OK)
                     return Json(new { error = "Could not load the card line." });
@@ -727,28 +742,547 @@ namespace Energy7.StationSurvey.Controllers
                 if (existing == null || existing.Id != mCardLine.Id)
                     return Json(new { error = "Could not load the card line." });
 
-                existing.RowNumber = mCardLine.RowNumber;
+                existing.LocationName = mCardLine.LocationName.Trim();
+                existing.RowNumber = string.IsNullOrWhiteSpace(mCardLine.RowNumber) ? null : mCardLine.RowNumber.Trim();
                 existing.TerminalNumberPositive = mCardLine.TerminalNumberPositive;
-                // Same rule as 90 EditCardLineCircuit: current → only +ve terminal + sequence no.,
-                // voltage → +ve and -ve terminals
+                // Same as 90 EditCardLineCircuit: current → +ve terminal + sequence no. (−ve is cleared),
+                // voltage → +ve and −ve terminals (sequence no. is cleared)
                 if (IsCurrentAttribute(existing))
+                {
+                    existing.TerminalNumberNegative = null;
                     existing.CurrentSequenceNumber = mCardLine.CurrentSequenceNumber;
+                }
                 else
+                {
                     existing.TerminalNumberNegative = mCardLine.TerminalNumberNegative;
+                    existing.CurrentSequenceNumber = null;
+                }
 
                 using var str = new StringContent(JsonConvert.SerializeObject(existing), Encoding.UTF8, "application/json");
                 var response = await hcf.Client.PutAsync($"CardLine/UpdateLocation/Id/{existing.Id}", str);
                 if (response.StatusCode != HttpStatusCode.OK)
-                    return Json(new { error = "Internal server error." });
+                    return Json(new { error = await ApiErrorMessage(response) });
+
+                // API keeps the old Row when the new one is blank, so re-read what was actually stored
+                var saved = existing;
+                var reread = await hcf.Client.GetAsync($"CardLine/Id/{existing.Id}");
+                if (reread.StatusCode == HttpStatusCode.OK)
+                    saved = JsonConvert.DeserializeObject<CardLine>(await reread.Content.ReadAsStringAsync()) ?? existing;
 
                 return Json(new
                 {
                     success = true,
-                    rowNumber = existing.RowNumber,
-                    terminalNumberPositive = existing.TerminalNumberPositive,
-                    terminalNumberNegative = existing.TerminalNumberNegative,
-                    currentSequenceNumber = existing.CurrentSequenceNumber
+                    locationName = saved.LocationName,
+                    rowNumber = saved.RowNumber,
+                    terminalNumberPositive = saved.TerminalNumberPositive,
+                    terminalNumberNegative = saved.TerminalNumberNegative,
+                    currentSequenceNumber = saved.CurrentSequenceNumber
                 });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        // ── Card-line wiring (same flow as 90 Yard Config → Create → card → line popup) ──────────
+
+        // ── Yard Config tab: clusters of the station with full detail + wired counts ─────────
+        public async Task<JsonResult> GetYardClusters(int siteId)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (siteId <= 0) return Json(new { error = "Select a station first." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+
+                var response = await hcf.Client.GetAsync($"Cluster/SiteId/{siteId}");
+                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not load clusters." });
+                var list = JsonConvert.DeserializeObject<List<Cluster>>(await response.Content.ReadAsStringAsync()) ?? new();
+
+                // Full detail per cluster (TypeId / power / modem / IP are not on the list projection)
+                var full = await Task.WhenAll(list.Select(c => GetClusterFromApi(hcf, c.Id)));
+
+                // Wired lines per cluster + distinct assets, from one site-wide call
+                var wiredLines = new Dictionary<int, int>();
+                var assetSets = new Dictionary<int, HashSet<int>>();
+                var clResp = await hcf.Client.GetAsync($"CardLine/SiteId/{siteId}");
+                if (clResp.StatusCode == HttpStatusCode.OK)
+                {
+                    var lines = JsonConvert.DeserializeObject<List<CardLine>>(await clResp.Content.ReadAsStringAsync()) ?? new();
+                    foreach (var l in lines.Where(x => x.ClusterId.HasValue && x.AssetId > 0))
+                    {
+                        wiredLines[l.ClusterId!.Value] = wiredLines.GetValueOrDefault(l.ClusterId.Value) + 1;
+                        if (!assetSets.TryGetValue(l.ClusterId.Value, out var set)) assetSets[l.ClusterId.Value] = set = new();
+                        set.Add(l.AssetId!.Value);
+                    }
+                }
+
+                var result = full.Where(c => c != null).Select(c =>
+                {
+                    var (rf, loc) = SplitClusterName(c!.Name);
+                    return new
+                    {
+                        id = c.Id,
+                        name = c.Name,
+                        rfCluster = rf,
+                        location = loc,
+                        typeId = c.TypeId,               // 1 Indoor, 2 Outdoor
+                        powerSupplyId = c.PowerSupplyId, // 1 24V, 2 110V, 3 110→24V
+                        modemId = c.ModemId,
+                        ip = c.IP,
+                        wiredLines = wiredLines.GetValueOrDefault(c.Id),
+                        assetCount = assetSets.TryGetValue(c.Id, out var s) ? s.Count : 0
+                    };
+                }).OrderBy(x => x.rfCluster ?? int.MaxValue).ThenBy(x => x.location).ToList();
+
+                return Json(new { clusters = result });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        // Clusters of the station (Cluster/SiteId) for the Wire form
+        public async Task<JsonResult> GetWireClusters(int siteId)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var response = await hcf.Client.GetAsync($"Cluster/SiteId/{siteId}");
+                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not load clusters." });
+                var list = JsonConvert.DeserializeObject<List<Cluster>>(await response.Content.ReadAsStringAsync()) ?? new();
+
+                // Wired-line count per cluster (one call for the whole station)
+                var wired = new Dictionary<int, int>();
+                var clResp = await hcf.Client.GetAsync($"CardLine/SiteId/{siteId}");
+                if (clResp.StatusCode == HttpStatusCode.OK)
+                {
+                    var lines = JsonConvert.DeserializeObject<List<CardLine>>(await clResp.Content.ReadAsStringAsync()) ?? new();
+                    foreach (var g in lines.Where(l => l.ClusterId.HasValue && l.AssetId > 0).GroupBy(l => l.ClusterId!.Value))
+                        wired[g.Key] = g.Count();
+                }
+                return Json(list.OrderBy(c => c.Name).Select(c => new
+                {
+                    id = c.Id, name = c.Name, wired = wired.TryGetValue(c.Id, out var n) ? n : 0
+                }));
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        // Cards + ADCs of one cluster (Card/ClusterId, ADC/ClusterId)
+        public async Task<JsonResult> GetWireCards(int clusterId)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+
+                var cardResp = await hcf.Client.GetAsync($"Card/ClusterId/{clusterId}");
+                if (cardResp.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not load cards." });
+                var cards = JsonConvert.DeserializeObject<List<Card>>(await cardResp.Content.ReadAsStringAsync()) ?? new();
+
+                var adcs = new List<ADC>();
+                var adcResp = await hcf.Client.GetAsync($"ADC/ClusterId/{clusterId}");
+                if (adcResp.StatusCode == HttpStatusCode.OK)
+                    adcs = JsonConvert.DeserializeObject<List<ADC>>(await adcResp.Content.ReadAsStringAsync()) ?? new();
+
+                // Lines of every card (CardLine/CardId also returns empty lines) → used / free + who is on each
+                var linesPerCard = await Task.WhenAll(cards.Select(async c =>
+                {
+                    var r = await hcf.Client.GetAsync($"CardLine/CardId/{c.Id}");
+                    var l = r.StatusCode == HttpStatusCode.OK
+                        ? JsonConvert.DeserializeObject<List<CardLine>>(await r.Content.ReadAsStringAsync()) ?? new()
+                        : new List<CardLine>();
+                    return (cardId: c.Id, lines: l);
+                }));
+                var lineMap = linesPerCard.ToDictionary(x => x.cardId, x => x.lines);
+
+                return Json(new
+                {
+                    cards = cards
+                        .OrderBy(c => CardSortKey(c.CardName))
+                        .Select(c =>
+                        {
+                            var l = lineMap.TryGetValue(c.Id, out var v) ? v : new List<CardLine>();
+                            return new
+                            {
+                                id = c.Id,
+                                name = c.CardName,
+                                total = l.Count,
+                                used = l.Count(x => x.AssetId > 0),
+                                lines = l.OrderBy(x => x.Number).Select(x => new
+                                {
+                                    id = x.Id,
+                                    number = x.Number,
+                                    used = x.AssetId > 0,
+                                    assetName = x.AssetName,
+                                    attributeName = x.AttributeName,
+                                    pin = x.Pin,
+                                    adc = x.ADCId > 0 && x.SequenceNumber.HasValue ? $"ADC{x.SequenceNumber}" : null,
+                                    // IDs so the card-line mapping popup can pre-select the dropdowns
+                                    assetTypeId = x.AssetTypeId,
+                                    assetId = x.AssetId,
+                                    attributeId = x.AttributeId,
+                                    adcId = x.ADCId
+                                })
+                            };
+                        }),
+                    adcs = adcs.OrderBy(a => a.SequenceNumber)
+                               .Select(a => new { id = a.Id, name = $"ADC{a.SequenceNumber} ({a.ADCNumber})" })
+                });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        public class AddCardRequest
+        {
+            public int SiteId { get; set; }
+            public int ClusterId { get; set; }
+            public string CardType { get; set; } = "";   // C | V5 | V82 | MintCard | DI
+        }
+
+        // Add the next card of one type to a cluster, the way the 90 Yard Config cluster popup does:
+        // re-save the cluster with that card number in its *Numbers list → API ClusterService.Save
+        // creates the card and its empty lines (C 10, V5 5, V82 10, MintCard 10, DI 10).
+        [HttpPost]
+        public async Task<JsonResult> AddClusterCard([FromBody] AddCardRequest m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.SiteId <= 0 || m.ClusterId <= 0) return Json(new { error = "Select a cluster first." });
+
+                var prefix = m.CardType switch
+                {
+                    "C" => "C-", "V5" => "V5-", "V82" => "V82-", "MintCard" => "MintCard-", "DI" => "DI-", _ => null
+                };
+                if (prefix == null) return Json(new { error = "Select a card type." });
+
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+
+                // API Cluster save overwrites every column (modem, IP…), so start from the stored row
+                var cluster = await GetClusterFromApi(hcf, m.ClusterId);
+                if (cluster == null || cluster.Id != m.ClusterId || cluster.SiteId != m.SiteId)
+                    return Json(new { error = "Could not load the cluster." });
+
+                var cardResp = await hcf.Client.GetAsync($"Card/ClusterId/{m.ClusterId}");
+                var cards = cardResp.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<Card>>(await cardResp.Content.ReadAsStringAsync()) ?? new()
+                    : new List<Card>();
+                var existingNos = cards
+                    .Select(c => c.CardName ?? "")
+                    .Where(n => n.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .Select(n => int.TryParse(n.Substring(prefix.Length), out var no) ? no : 0)
+                    .Where(no => no > 0).ToList();
+                var next = existingNos.Count == 0 ? 1 : existingNos.Max() + 1;
+                var newName = prefix + next;
+
+                // Only the chosen type gets a list; the API skips a type whose list is empty.
+                // Its count must not be below the cards already there, or the API skips creation.
+                cluster.CurrentCardNumbers = new(); cluster.V5Numbers = new(); cluster.V82Numbers = new();
+                cluster.MintCardNumbers = new(); cluster.DINumbers = new();
+                var count = Math.Max(existingNos.Count + 1, 1);
+                switch (m.CardType)
+                {
+                    case "C":        cluster.CurrentCardNumbers = new() { next }; cluster.CurrentCard = Math.Max(cluster.CurrentCard, count); break;
+                    case "V5":       cluster.V5Numbers = new() { next };          cluster.V5 = Math.Max(cluster.V5, count); break;
+                    case "V82":      cluster.V82Numbers = new() { next };         cluster.V82 = Math.Max(cluster.V82, count); break;
+                    case "MintCard": cluster.MintCardNumbers = new() { next };    cluster.MintCard = Math.Max(cluster.MintCard, count); break;
+                    case "DI":       cluster.DINumbers = new() { next };          cluster.DI = Math.Max(cluster.DI, count); break;
+                }
+                cluster.CreatedBy = loginUser.Id;
+
+                using var str = new StringContent(JsonConvert.SerializeObject(cluster), Encoding.UTF8, "application/json");
+                var response = await hcf.Client.PostAsync("Cluster", str);
+                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(response) });
+
+                // Return the refreshed card list so the Wire form can select the new card
+                var after = await hcf.Client.GetAsync($"Card/ClusterId/{m.ClusterId}");
+                var list = after.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<Card>>(await after.Content.ReadAsStringAsync()) ?? new()
+                    : new List<Card>();
+                var created = list.FirstOrDefault(c => string.Equals(c.CardName, newName, StringComparison.OrdinalIgnoreCase));
+                if (created == null) return Json(new { error = $"Card {newName} was not created." });
+                return Json(new { success = true, cardId = created.Id, cards = list.Select(c => new { id = c.Id, name = c.CardName }) });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        public class AddAdcRequest
+        {
+            public int SiteId { get; set; }
+            public int ClusterId { get; set; }
+            public int AdcNumber { get; set; }
+            public int AdcTypeId { get; set; }   // 1 Special 1056, 2 Normal, 3 Special 1507
+        }
+
+        // Add an ADC to a cluster (same as 90 Yard Config cluster popup → POST api/ADC).
+        // SequenceNumber is auto-assigned as the next in the cluster.
+        [HttpPost]
+        public async Task<JsonResult> AddClusterAdc([FromBody] AddAdcRequest m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.SiteId <= 0 || m.ClusterId <= 0) return Json(new { error = "Select a cluster first." });
+                if (m.AdcNumber <= 0) return Json(new { error = "Enter a valid ADC number." });
+                if (m.AdcTypeId < 1 || m.AdcTypeId > 3) return Json(new { error = "Select the ADC type." });
+
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+
+                var cluster = await GetClusterFromApi(hcf, m.ClusterId);
+                if (cluster == null || cluster.Id != m.ClusterId || cluster.SiteId != m.SiteId)
+                    return Json(new { error = "Cluster not found on this station." });
+
+                var listResp = await hcf.Client.GetAsync($"ADC/ClusterId/{m.ClusterId}");
+                var adcs = listResp.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<ADC>>(await listResp.Content.ReadAsStringAsync()) ?? new()
+                    : new List<ADC>();
+                var nextSeq = adcs.Count == 0 ? 1 : adcs.Max(a => a.SequenceNumber) + 1;
+
+                var row = new ADC
+                {
+                    ClusterId = m.ClusterId, SiteId = m.SiteId, SequenceNumber = nextSeq,
+                    ADCNumber = m.AdcNumber, ADCTypeId = m.AdcTypeId, CreatedBy = loginUser.Id
+                };
+                using var str = new StringContent(JsonConvert.SerializeObject(row), Encoding.UTF8, "application/json");
+                var response = await hcf.Client.PostAsync("ADC", str);
+                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(response) });
+
+                var after = await hcf.Client.GetAsync($"ADC/ClusterId/{m.ClusterId}");
+                var list = after.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<ADC>>(await after.Content.ReadAsStringAsync()) ?? new()
+                    : new List<ADC>();
+                return Json(new
+                {
+                    success = true,
+                    adcs = list.OrderBy(a => a.SequenceNumber).Select(a => new { id = a.Id, name = $"ADC{a.SequenceNumber} ({a.ADCNumber})" })
+                });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        // "C-2" → ("C-", 2) so cards sort C-1, C-2 … C-10, then V5-1 …
+        private static (string, int) CardSortKey(string? name)
+        {
+            name ??= "";
+            var dash = name.LastIndexOf('-');
+            return dash >= 0 && int.TryParse(name[(dash + 1)..], out var n) ? (name[..(dash + 1)], n) : (name, 0);
+        }
+
+        // Free (not yet assigned) lines of one card (CardLine/CardId)
+        public async Task<JsonResult> GetWireLines(int cardId)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var response = await hcf.Client.GetAsync($"CardLine/CardId/{cardId}");
+                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not load card lines." });
+                var lines = JsonConvert.DeserializeObject<List<CardLine>>(await response.Content.ReadAsStringAsync()) ?? new();
+                return Json(lines.Where(l => !(l.AssetId > 0)).OrderBy(l => l.Number)
+                                 .Select(l => new { id = l.Id, number = l.Number }));
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        public class WireCardLineRequest
+        {
+            public int SiteId { get; set; }
+            public int ClusterId { get; set; }
+            public int CardId { get; set; }
+            public int CardLineId { get; set; }
+            public int AssetTypeId { get; set; }
+            public int AssetId { get; set; }
+            public int AttributeId { get; set; }
+            public int? ADCId { get; set; }
+            public int? Pin { get; set; }
+        }
+
+        // Assign Asset + Attribute (+ ADC/Pin) to a free card line → POST api/CardLine (90 CreateCardLine)
+        [HttpPost]
+        public async Task<JsonResult> WireCardLine([FromBody] WireCardLineRequest m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.SiteId <= 0) return Json(new { error = "Select a station first." });
+                if (m.ClusterId <= 0 || m.CardId <= 0 || m.CardLineId <= 0) return Json(new { error = "Select a cluster, card and line." });
+                if (m.AssetId <= 0 || m.AttributeId <= 0 || m.AssetTypeId <= 0) return Json(new { error = "Asset / attribute missing." });
+                if ((m.ADCId > 0) != (m.Pin > 0)) return Json(new { error = "Select both ADC and Pin, or neither." });
+                if (m.Pin.HasValue && (m.Pin < 1 || m.Pin > 10)) return Json(new { error = "Pin must be 1–10." });
+
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+
+                // The target line must be on this station's cluster → card, and still be free.
+                // Not via CardLine/Id: that API query drops a line with no asset type yet (it filters
+                // assetType.IsActive), so an empty line comes back as null. CardLine/CardId returns empty
+                // lines too (it is what the 90 card-line popup uses).
+                var cluster = await GetClusterFromApi(hcf, m.ClusterId);
+                if (cluster == null || cluster.Id != m.ClusterId || cluster.SiteId != m.SiteId)
+                    return Json(new { error = "Cluster not found on this station." });
+                var cardResp = await hcf.Client.GetAsync($"Card/ClusterId/{m.ClusterId}");
+                var clusterCards = cardResp.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<Card>>(await cardResp.Content.ReadAsStringAsync()) ?? new()
+                    : new List<Card>();
+                if (!clusterCards.Any(c => c.Id == m.CardId)) return Json(new { error = "Card not found in this cluster." });
+
+                var linesResp = await hcf.Client.GetAsync($"CardLine/CardId/{m.CardId}");
+                if (linesResp.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not load the card's lines." });
+                var cardLines = JsonConvert.DeserializeObject<List<CardLine>>(await linesResp.Content.ReadAsStringAsync()) ?? new();
+                var line = cardLines.FirstOrDefault(l => l.Id == m.CardLineId);
+                if (line == null) return Json(new { error = "Card line not found on this card." });
+                if (line.AssetId > 0) return Json(new { error = "This line is already used by another asset. Pick a free line." });
+                line.CardId = m.CardId;   // the fallback rows of CardLine/CardId may omit it
+
+                // Same duplicate rules as API CardLineService.Save — checked here because the API
+                // turns them into a bare 500 "Internal Server Error"
+                var siteResp = await hcf.Client.GetAsync($"CardLine/SiteId/{m.SiteId}");
+                if (siteResp.StatusCode == HttpStatusCode.OK)
+                {
+                    var siteLines = JsonConvert.DeserializeObject<List<CardLine>>(await siteResp.Content.ReadAsStringAsync()) ?? new();
+                    var dupAttr = siteLines.FirstOrDefault(x => x.Id != line.Id && x.AssetId == m.AssetId && x.AttributeId == m.AttributeId);
+                    if (dupAttr != null)
+                        return Json(new { error = $"This attribute is already wired: {dupAttr.ClusterName} / {dupAttr.CardName} / line {dupAttr.Number}." });
+                    if (m.ADCId > 0)
+                    {
+                        var dupPin = siteLines.FirstOrDefault(x => x.Id != line.Id && x.ADCId == m.ADCId && x.Pin == m.Pin);
+                        if (dupPin != null)
+                            return Json(new { error = $"Pin-{m.Pin} of this ADC is already used in {dupPin.CardName} (line {dupPin.Number})." });
+                    }
+                }
+
+                var row = new CardLine
+                {
+                    Id = line.Id, CardId = line.CardId, Number = line.Number, CreatedBy = loginUser.Id,
+                    SiteId = m.SiteId,   // send SiteId in the API request too
+                    AssetTypeId = m.AssetTypeId, AssetId = m.AssetId, AttributeId = m.AttributeId,
+                    ADCId = m.ADCId > 0 ? m.ADCId : null, Pin = m.Pin > 0 ? m.Pin : null
+                };
+                using var str = new StringContent(JsonConvert.SerializeObject(row), Encoding.UTF8, "application/json");
+                var response = await hcf.Client.PostAsync("CardLine", str);
+                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(response) });
+                return Json(new { success = true, id = line.Id });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        public class LineMap
+        {
+            public int Id { get; set; }                 // card line id
+            public int? AssetTypeId { get; set; }
+            public int? AssetId { get; set; }
+            public int? AttributeId { get; set; }
+            public int? ADCId { get; set; }
+            public int? Pin { get; set; }
+        }
+        public class SaveCardLinesRequest
+        {
+            public int SiteId { get; set; }
+            public int ClusterId { get; set; }
+            public int CardId { get; set; }
+            public List<LineMap> Lines { get; set; } = new();
+        }
+
+        // Map / re-map / clear all lines of one card in a single Save, the way the 90 Yard Config
+        // card-line popup (fnEditCardLine) does. Each changed line is posted to api/CardLine.
+        [HttpPost]
+        public async Task<JsonResult> SaveCardLines([FromBody] SaveCardLinesRequest m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.SiteId <= 0 || m.ClusterId <= 0 || m.CardId <= 0) return Json(new { error = "Select a card first." });
+                if (m.Lines == null || m.Lines.Count == 0) return Json(new { error = "Nothing to save." });
+
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+
+                var cluster = await GetClusterFromApi(hcf, m.ClusterId);
+                if (cluster == null || cluster.Id != m.ClusterId || cluster.SiteId != m.SiteId)
+                    return Json(new { error = "Cluster not found on this station." });
+
+                var cardResp = await hcf.Client.GetAsync($"Card/ClusterId/{m.ClusterId}");
+                var clusterCards = cardResp.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<Card>>(await cardResp.Content.ReadAsStringAsync()) ?? new()
+                    : new List<Card>();
+                if (!clusterCards.Any(c => c.Id == m.CardId)) return Json(new { error = "Card not found in this cluster." });
+
+                var linesResp = await hcf.Client.GetAsync($"CardLine/CardId/{m.CardId}");
+                if (linesResp.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not load the card's lines." });
+                var cardLines = JsonConvert.DeserializeObject<List<CardLine>>(await linesResp.Content.ReadAsStringAsync()) ?? new();
+
+                var siteResp = await hcf.Client.GetAsync($"CardLine/SiteId/{m.SiteId}");
+                var siteLines = siteResp.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<CardLine>>(await siteResp.Content.ReadAsStringAsync()) ?? new()
+                    : new List<CardLine>();
+
+                // Normalise each requested line to this card, and work out what actually changed
+                var cardLineIds = cardLines.Select(l => l.Id).ToHashSet();
+                var planned = new List<(CardLine existing, LineMap want, bool wire)>();
+                foreach (var w in m.Lines)
+                {
+                    var existing = cardLines.FirstOrDefault(l => l.Id == w.Id);
+                    if (existing == null) continue;   // not a line of this card — skip silently
+                    bool wire = w.AssetId > 0 && w.AttributeId > 0 && w.AssetTypeId > 0;
+                    if (wire && (w.ADCId > 0) != (w.Pin > 0)) return Json(new { error = $"Line {existing.Number}: select both ADC and Pin, or neither." });
+                    if (wire && w.Pin.HasValue && (w.Pin < 1 || w.Pin > 10)) return Json(new { error = $"Line {existing.Number}: Pin must be 1–10." });
+                    planned.Add((existing, w, wire));
+                }
+
+                // Duplicate checks across the final desired state (within the batch + the rest of the station)
+                var otherSiteLines = siteLines.Where(l => !cardLineIds.Contains(l.Id)).ToList();
+                var seenAttr = new HashSet<string>();
+                var seenPin = new HashSet<string>();
+                foreach (var (existing, w, wire) in planned)
+                {
+                    if (!wire) continue;
+                    var ak = $"{w.AssetId}:{w.AttributeId}";
+                    if (!seenAttr.Add(ak)) return Json(new { error = $"Line {existing.Number}: this asset + attribute is used on two lines of this card." });
+                    if (otherSiteLines.Any(l => l.AssetId == w.AssetId && l.AttributeId == w.AttributeId))
+                        return Json(new { error = $"Line {existing.Number}: this attribute is already wired elsewhere on the station." });
+                    if (w.ADCId > 0)
+                    {
+                        var pk = $"{w.ADCId}:{w.Pin}";
+                        if (!seenPin.Add(pk)) return Json(new { error = $"Line {existing.Number}: this ADC + Pin is used on two lines." });
+                        if (otherSiteLines.Any(l => l.ADCId == w.ADCId && l.Pin == w.Pin))
+                            return Json(new { error = $"Line {existing.Number}: this ADC + Pin is already used elsewhere." });
+                    }
+                }
+
+                // Apply only the lines whose mapping changed
+                int changed = 0;
+                foreach (var (existing, w, wire) in planned)
+                {
+                    bool wasWired = existing.AssetId > 0;
+                    bool same = wasWired == wire
+                        && existing.AssetId == (wire ? w.AssetId : null)
+                        && existing.AttributeId == (wire ? w.AttributeId : null)
+                        && existing.ADCId == (wire && w.ADCId > 0 ? w.ADCId : null)
+                        && existing.Pin == (wire && w.Pin > 0 ? w.Pin : null);
+                    if (same) continue;
+
+                    var row = new CardLine
+                    {
+                        Id = existing.Id, CardId = m.CardId, Number = existing.Number, CreatedBy = loginUser.Id, SiteId = m.SiteId,
+                        AssetTypeId = wire ? w.AssetTypeId : null,
+                        AssetId = wire ? w.AssetId : null,
+                        AttributeId = wire ? w.AttributeId : null,
+                        ADCId = wire && w.ADCId > 0 ? w.ADCId : null,
+                        Pin = wire && w.Pin > 0 ? w.Pin : null
+                    };
+                    using var str = new StringContent(JsonConvert.SerializeObject(row), Encoding.UTF8, "application/json");
+                    var resp = await hcf.Client.PostAsync("CardLine", str);
+                    if (resp.StatusCode != HttpStatusCode.OK)
+                        return Json(new { error = $"Line {existing.Number}: {await ApiErrorMessage(resp)}" });
+                    changed++;
+                }
+
+                return Json(new { success = true, changed });
             }
             catch (Exception ex) { return Json(new { error = ex.Message }); }
         }
@@ -759,6 +1293,176 @@ namespace Energy7.StationSurvey.Controllers
             var name = (c.AttributeName ?? "").ToLower();
             return name.Contains("ma")
                 || (c.AssetTypeId == (int)Utility.Utility.AssetType.POINT_MACHINE && name.Contains("-c"));
+        }
+
+        // ── Uploaded files live on the API server; build their public root from APIBaseUrl ──
+        private string FileRoot()
+        {
+            var b = _config["APIBaseUrl"] ?? "";
+            return b.Replace("api/", "").TrimEnd('/');   // "http://energy7.in:90/api/" -> "http://energy7.in:90"
+        }
+
+        // ══ Survey NMDL upload (proxy to api/SiteSurveyNMDL) ══════════════════════════════
+        public class UploadNmdlDto
+        {
+            public int SiteId { get; set; }
+            public string Category { get; set; }
+            public string OriginalFileName { get; set; }
+            public string Remarks { get; set; }
+            public string FileBase64 { get; set; }
+            public string FileExtension { get; set; }
+        }
+
+        [HttpGet]
+        public async Task<JsonResult> GetNMDL(int siteId)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (siteId <= 0) return Json(new { error = "Select a station first." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var resp = await hcf.Client.GetAsync($"SiteSurveyNMDL/SiteId/{siteId}");
+                if (resp.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not load NMDL files." });
+                var list = JsonConvert.DeserializeObject<List<SiteSurveyNMDL>>(await resp.Content.ReadAsStringAsync()) ?? new();
+                var root = FileRoot();
+                return Json(list.Select(x => new
+                {
+                    id = x.Id,
+                    name = string.IsNullOrWhiteSpace(x.OriginalFileName) ? x.FileName : x.OriginalFileName,
+                    remarks = x.Remarks,
+                    category = x.Category,
+                    createdDate = x.CreatedDate,
+                    url = string.IsNullOrEmpty(x.FileUrl) ? null : root + x.FileUrl
+                }));
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        [HttpPost]
+        public async Task<JsonResult> UploadNMDL([FromBody] UploadNmdlDto m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.SiteId <= 0) return Json(new { error = "Select a station first." });
+                if (string.IsNullOrEmpty(m.FileBase64)) return Json(new { error = "Choose a file to upload." });
+
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var row = new SiteSurveyNMDL
+                {
+                    SiteId = m.SiteId,
+                    Category = string.IsNullOrWhiteSpace(m.Category) ? "NMDL" : m.Category.Trim(),
+                    OriginalFileName = m.OriginalFileName,
+                    Remarks = string.IsNullOrWhiteSpace(m.Remarks) ? null : m.Remarks.Trim(),
+                    FileBase64 = m.FileBase64,
+                    FileExtension = m.FileExtension,
+                    CreatedBy = loginUser.Id
+                };
+                using var str = new StringContent(JsonConvert.SerializeObject(row), Encoding.UTF8, "application/json");
+                var resp = await hcf.Client.PostAsync("SiteSurveyNMDL", str);
+                if (resp.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(resp) });
+                return Json(new { success = true });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        [HttpPost]
+        public async Task<JsonResult> DeleteNMDL(int id)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (id <= 0) return Json(new { error = "Invalid file." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var resp = await hcf.Client.DeleteAsync($"SiteSurveyNMDL/{id}/UserId/{loginUser.Id}");
+                if (resp.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(resp) });
+                return Json(new { success = true });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        // ══ Location-wise photos (proxy to api/LocationPhoto) ═════════════════════════════
+        public class UploadPhotoDto
+        {
+            public int ClusterId { get; set; }
+            public int SiteId { get; set; }
+            public string Caption { get; set; }
+            public string OriginalFileName { get; set; }
+            public string FileBase64 { get; set; }
+            public string FileExtension { get; set; }
+        }
+
+        [HttpGet]
+        public async Task<JsonResult> GetLocationPhotos(int clusterId)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (clusterId <= 0) return Json(new { error = "Select a location first." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var resp = await hcf.Client.GetAsync($"LocationPhoto/ClusterId/{clusterId}");
+                if (resp.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not load photos." });
+                var list = JsonConvert.DeserializeObject<List<LocationPhoto>>(await resp.Content.ReadAsStringAsync()) ?? new();
+                var root = FileRoot();
+                return Json(list.Select(x => new
+                {
+                    id = x.Id,
+                    url = string.IsNullOrEmpty(x.ImageUrl) ? null : root + x.ImageUrl,
+                    caption = x.Caption,
+                    name = x.OriginalFileName,
+                    createdDate = x.CreatedDate
+                }));
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        [HttpPost]
+        public async Task<JsonResult> UploadLocationPhoto([FromBody] UploadPhotoDto m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.ClusterId <= 0 || m.SiteId <= 0) return Json(new { error = "Select a location first." });
+                if (string.IsNullOrEmpty(m.FileBase64)) return Json(new { error = "Choose a photo to upload." });
+
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var row = new LocationPhoto
+                {
+                    ClusterId = m.ClusterId,
+                    SiteId = m.SiteId,
+                    Caption = string.IsNullOrWhiteSpace(m.Caption) ? null : m.Caption.Trim(),
+                    OriginalFileName = m.OriginalFileName,
+                    FileBase64 = m.FileBase64,
+                    FileExtension = m.FileExtension,
+                    CreatedBy = loginUser.Id
+                };
+                using var str = new StringContent(JsonConvert.SerializeObject(row), Encoding.UTF8, "application/json");
+                var resp = await hcf.Client.PostAsync("LocationPhoto", str);
+                if (resp.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(resp) });
+                return Json(new { success = true });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        [HttpPost]
+        public async Task<JsonResult> DeleteLocationPhoto(int id)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (id <= 0) return Json(new { error = "Invalid photo." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var resp = await hcf.Client.DeleteAsync($"LocationPhoto/{id}/UserId/{loginUser.Id}");
+                if (resp.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(resp) });
+                return Json(new { success = true });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
         }
 
         public JsonResult GetZonesJson()

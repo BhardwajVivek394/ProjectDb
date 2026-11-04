@@ -1,0 +1,93 @@
+@*
+    Site-wide toast notifications (SweetAlert2 in toast mode).
+    Included by _Layout and by the Login page (which has no layout).
+
+    JS:     E7.success(msg)  E7.error(msg)  E7.warn(msg)  E7.info(msg)
+            E7.ajaxError(xhr, fallback)   – for $.ajax error callbacks; shows the server's message / HTTP status
+            E7.flash(type, msg)           – show a toast after the next page load (use before location.reload())
+    Server: TempData["ToastSuccess"] / ["ToastError"] / ["ToastWarning"] / ["ToastInfo"], or ViewBag.Error
+*@
+@{
+    var serverToasts = new List<(string Type, string Msg)>();
+    void AddToast(string type, object? msg) { var s = msg as string; if (!string.IsNullOrWhiteSpace(s)) serverToasts.Add((type, s)); }
+    AddToast("success", TempData["ToastSuccess"]);
+    AddToast("error",   TempData["ToastError"]);
+    AddToast("warning", TempData["ToastWarning"]);
+    AddToast("info",    TempData["ToastInfo"]);
+    AddToast("error",   (object?)ViewBag.Error);
+    // Server-side model validation errors (e.g. [Required] on a posted form)
+    foreach (var e in ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).Distinct())
+        AddToast("warning", e);
+}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
+<style>
+    .e7-toast.swal2-popup{font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 14px;border-radius:9px;border-left:4px solid var(--e7t-c,#2980b9);box-shadow:0 6px 24px rgba(44,14,14,.18)}
+    .e7-toast .swal2-title{font-size:13px;font-weight:600;color:#1a0e0a;margin:0 4px;line-height:1.4;white-space:pre-line;text-align:left}
+    .e7-toast.e7t-success{--e7t-c:#1d9e75}.e7-toast.e7t-error{--e7t-c:#c0392b}.e7-toast.e7t-warning{--e7t-c:#ba7517}.e7-toast.e7t-info{--e7t-c:#2980b9}
+    .e7-toast .swal2-timer-progress-bar{background:var(--e7t-c)}
+</style>
+<script>
+    (function () {
+        var KEY = 'e7.flash';
+        var hasSwal = typeof Swal !== 'undefined';
+        var Toast = hasSwal ? Swal.mixin({
+            toast: true, position: 'top-end', showConfirmButton: false, showCloseButton: true,
+            timerProgressBar: true,
+            didOpen: function (t) { t.addEventListener('mouseenter', Swal.stopTimer); t.addEventListener('mouseleave', Swal.resumeTimer); }
+        }) : null;
+
+        function show(type, msg) {
+            msg = (msg == null ? '' : String(msg)).trim();
+            if (!msg) return;
+            if (!Toast) { window.alert(msg); return; }   // CDN blocked → plain alert so the message is never lost
+            Toast.fire({
+                icon: type, title: msg,
+                timer: type === 'error' ? 6000 : type === 'warning' ? 4500 : 3000,
+                customClass: { popup: 'e7-toast e7t-' + type }
+            });
+        }
+
+        window.E7 = {
+            toast: show,
+            success: function (m) { show('success', m); },
+            error:   function (m) { show('error', m); },
+            warn:    function (m) { show('warning', m); },
+            info:    function (m) { show('info', m); },
+            // $.ajax error callback → show the server's own message when there is one
+            ajaxError: function (xhr, fallback) {
+                var msg = '';
+                try {
+                    var j = xhr && (xhr.responseJSON || JSON.parse(xhr.responseText || 'null'));
+                    msg = j && (j.error || j.message || j.title) || '';
+                } catch (e) { }
+                if (!msg && xhr && xhr.status === 0) msg = 'Network error — check your connection.';
+                if (!msg && xhr && xhr.status) msg = (fallback || 'Request failed') + ' (' + xhr.status + (xhr.statusText ? ' ' + xhr.statusText : '') + ')';
+                show('error', msg || fallback || 'Request failed');
+            },
+            // Queue a toast for the next page load (survives location.reload())
+            flash: function (type, msg) {
+                try { sessionStorage.setItem(KEY, JSON.stringify({ t: type, m: msg })); } catch (e) { }
+            }
+        };
+
+        // SweetAlert2 shows one toast at a time, so messages queued for page load are merged
+        // into one toast, using the most severe type among them.
+        function showPending() {
+            var q = [];
+            try {
+                var f = JSON.parse(sessionStorage.getItem(KEY) || 'null');
+                sessionStorage.removeItem(KEY);
+                if (f) q.push({ t: f.t, m: f.m });
+            } catch (e) { }
+            @foreach (var t in serverToasts)
+            {
+                @:q.push({ t: @Json.Serialize(t.Type), m: @Json.Serialize(t.Msg) });
+            }
+            if (!q.length) return;
+            var rank = { error: 3, warning: 2, info: 1, success: 0 }, top = q[0].t;
+            q.forEach(function (x) { if (rank[x.t] > rank[top]) top = x.t; });
+            show(top, q.map(function (x) { return x.m; }).join('\n'));
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', showPending); else showPending();
+    })();
+</script>

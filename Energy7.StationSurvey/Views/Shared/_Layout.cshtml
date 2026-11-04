@@ -113,6 +113,8 @@
     .ar .aname.na{color:var(--warn);text-decoration:line-through;font-size:10px}
     .ar .rt-inp{width:48px;border:1px solid var(--bd);border-radius:3px;padding:2px 4px;font-size:10px;text-align:center}
     .ar .rt-inp:focus{border-color:var(--co)}
+    .ar .loc-inp{width:84px;border:1px solid var(--bd);border-radius:3px;padding:2px 4px;font-size:10px}
+    .ar .loc-inp:focus{border-color:var(--co)}
     .ar .loc-s-sm{font-size:10px;padding:2px 3px;border:1px solid var(--bd);border-radius:3px;background:#fff;color:var(--tx);width:58px}
     .ar .sv-btn{background:var(--ok);border:none;color:#fff;font-size:9px;padding:2px 6px;border-radius:3px;cursor:pointer;font-weight:600;white-space:nowrap}
     .ar .sv-btn:hover{opacity:.85}
@@ -435,6 +437,7 @@
         </div>
     </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<partial name="_Toast" />
     <script>
         // Checkbox options, in the same order as the 90 Edit Site page.
         // key = Site property name sent to the API.
@@ -526,12 +529,12 @@
             Promise.all([lookups, fetch('/Station/GetSiteJson?id=' + siteId).then(function (r) { return r.json(); })])
                 .then(function (res) {
                     var site = res[1];
-                    if (!site || site.error) { alert((site && site.error) || 'Could not load station'); return; }
+                    if (!site || site.error) { E7.error((site && site.error) || 'Could not load station'); return; }
                     return fillStationForm(site).then(function () {
                         bootstrap.Modal.getOrCreateInstance(nsEl('newStationModal')).show();
                     });
                 })
-                .catch(function () { alert('Could not load station'); });
+                .catch(function () { E7.error('Could not load station'); });
         }
 
         function resetNewStationForm() {
@@ -629,13 +632,13 @@
             var active   = nsEl('nsMQTTActive').value.trim();
             var macId    = nsEl('nsMACId').value.trim();
 
-            if (zone  === 0)                        { alert('Select Zone');                              return; }
-            if (divId === 0)                        { alert('Select Division');                          return; }
-            if (!name)                              { alert('Enter Station Name');                       return; }
-            if (!mqtt)                              { alert('Enter MQTT Base Path');                     return; }
-            if (channels === '' || +channels < 0)   { alert('Enter valid MQTT No. of Channels');         return; }
-            if (active === '' || +active <= 0)      { alert('MQTT Active Threshold must be more than 0'); return; }
-            if (!macId)                             { alert('Enter Mac Id');                             return; }
+            if (zone  === 0)                        { E7.warn('Select Zone');                              return; }
+            if (divId === 0)                        { E7.warn('Select Division');                          return; }
+            if (!name)                              { E7.warn('Enter Station Name');                       return; }
+            if (!mqtt)                              { E7.warn('Enter MQTT Base Path');                     return; }
+            if (channels === '' || +channels < 0)   { E7.warn('Enter valid MQTT No. of Channels');         return; }
+            if (active === '' || +active <= 0)      { E7.warn('MQTT Active Threshold must be more than 0'); return; }
+            if (!macId)                             { E7.warn('Enter Mac Id');                             return; }
 
             var modemType = nsIntOrNull(nsEl('nsModemType').value);
             var isDL      = nsEl('nsIsDataLogger').checked;
@@ -685,14 +688,15 @@
             .then(r => r.json())
             .then(res => {
                 if (res && res.error) {
-                    alert(res.error);
+                    E7.error(res.error);
                 } else {
                     var m = bootstrap.Modal.getInstance(nsEl('newStationModal'));
                     if (m) m.hide();
+                    E7.flash('success', (isEdit ? 'Station updated: ' : 'Station created: ') + name);
                     location.reload();   // simplest: refresh so dropdown picks up the change
                 }
             })
-            .catch(() => alert('Save failed'))
+            .catch(() => E7.error('Save failed — could not reach the server'))
             .finally(() => {
                 btn.disabled = false; btn.textContent = isEdit ? 'Update Station' : 'Create Station';
             });
