@@ -1,0 +1,271 @@
+@model Energy7.StationSurvey.Utility.StationMaterialPositioning
+@using Energy7.StationSurvey.Utility
+@{
+    Layout = null;
+    string Short(string key) { var p = key.Split('|'); return (p[0] == MaterialPositioning.KindVoltage ? "V " : "C ") + p.Last(); }
+    string Label(StationLocation l) => MaterialPositioning.Label(l);
+    List<string> Inputs(StationLocation l, string kind) => l.HasSurvey
+        ? l.Plan.Points.Where(p => p.Kind == kind).Select(p => $"{p.Asset}({p.Title})").ToList()
+        : l.WiredPoints.Where(p => p.Kind == kind).Select(p => $"{p.Asset}({p.Title})").ToList();
+    int V(StationLocation l) => l.HasSurvey ? l.Plan.Voltage : l.WiredVoltageAll;
+    int C(StationLocation l) => l.HasSurvey ? l.Plan.Current : l.WiredCurrentAll;
+    var gapLocations = Model.Locations.Where(l => l.Gaps.Count > 0).ToList();
+    var warnings = Model.Warnings.Concat(Model.Locations.SelectMany(l => l.Plan.Warnings.Select(w => $"{Label(l)}: {w}"))).ToList();
+    var surveyed = Model.Locations.Where(l => l.HasSurvey).ToList();
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Material Positioning - @Model.StationName</title>
+    <style>
+        @@page { size: A4 landscape; margin: 10mm; }
+        * { box-sizing: border-box; }
+        body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10px; color: #1f2933; background: #f3f4f6; margin: 0; }
+        .bar { position: sticky; top: 0; z-index: 2; background: #fff; border-bottom: 1px solid #d1d5db; padding: 8px 16px; display: flex; gap: 8px; align-items: center; }
+        .bar button { font: inherit; font-size: 12px; padding: 6px 14px; border: 1px solid #9ca3af; border-radius: 6px; background: #fff; cursor: pointer; }
+        .bar .p { background: #e16349; border-color: #e16349; color: #fff; }
+        .page { background: #fff; width: 297mm; margin: 12px auto; padding: 10mm; page-break-after: always; }
+        .page:last-child { page-break-after: auto; }
+        .hdr { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #2c0e0e; padding-bottom: 4px; margin-bottom: 8px; }
+        .hdr h2 { font-size: 14px; margin: 0; }
+        .hdr span { color: #6b7280; }
+        h1 { font-size: 22px; margin: 0 0 4px; }
+        h3 { font-size: 11px; margin: 12px 0 5px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+        th, td { border: 1px solid #9ca3af; padding: 3px 4px; text-align: center; vertical-align: top; }
+        thead { display: table-header-group; }
+        tr { page-break-inside: avoid; }
+        th { background: #fbe9e4; font-weight: 600; }
+        td.l, th.l { text-align: left; }
+        td.list { text-align: left; font-size: 9px; line-height: 1.4; }
+        tfoot th, tr.tot th { background: #f3f4f6; }
+        .muted { color: #6b7280; }
+        .gap { background: #fef3c7; }
+        .tag { font-size: 8px; color: #6b7280; display: block; }
+        .cover { text-align: center; padding-top: 30mm; }
+        .cover table { width: 55%; margin: 20px auto; font-size: 12px; }
+        .sign { display: flex; justify-content: space-around; margin-top: 30mm; }
+        .sign div { width: 30%; border-top: 1px solid #1f2933; padding-top: 4px; text-align: center; }
+        .kpi { display: flex; gap: 8px; margin: 18px auto 0; width: 80%; }
+        .kpi div { flex: 1; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; }
+        .kpi b { display: block; font-size: 18px; }
+        .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .rules li { margin-bottom: 2px; }
+        @@media print { body { background: #fff; } .bar { display: none; } .page { margin: 0; width: auto; padding: 0; } }
+    </style>
+</head>
+<body>
+<div class="bar">
+    <button class="p" onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="window.close()">Close</button>
+    <span class="muted">A4 landscape · spare @Model.SparePercent.ToString("0.##") % · generated @Model.GeneratedAt.ToString("dd-MMM-yyyy HH:mm")</span>
+</div>
+
+<!-- 1. Cover -->
+<div class="page">
+    <div class="cover">
+        <h1>Material Positioning Report</h1>
+        <div class="muted">RDPMS installation · Energy7</div>
+        <table>
+            <tr><th class="l">Station</th><td class="l">@Model.StationName @(string.IsNullOrWhiteSpace(Model.StationCode) ? "" : $"({Model.StationCode})")</td></tr>
+            <tr><th class="l">Zone / Division</th><td class="l">@Model.ZoneDivision</td></tr>
+            <tr><th class="l">Locations</th><td class="l">@Model.Locations.Count (@surveyed.Count surveyed, @(Model.Locations.Count - surveyed.Count) wired only)</td></tr>
+            <tr><th class="l">Assets</th><td class="l">@Model.Assets.Count</td></tr>
+            <tr><th class="l">Date</th><td class="l">@Model.GeneratedAt.ToString("dd-MMM-yyyy")</td></tr>
+            <tr><th class="l">Prepared by</th><td class="l">@Model.PreparedBy</td></tr>
+            <tr><th class="l">Spare</th><td class="l">@Model.SparePercent.ToString("0.##") %</td></tr>
+        </table>
+        <div class="kpi">
+            <div>Data points<b>@Model.Locations.Sum(l => V(l) + C(l))</b></div>
+            <div>Voltage / current<b>@Model.Locations.Sum(V) / @Model.Locations.Sum(C)</b></div>
+            <div>MintCard / C card<b>@surveyed.Sum(l => l.Plan.VoltageCards) / @surveyed.Sum(l => l.Plan.CurrentCards)</b></div>
+            <div>A10 = ADC<b>@surveyed.Sum(l => l.Plan.A10)</b></div>
+            <div>FTU channels<b>@Model.Locations.Sum(l => l.HasSurvey ? l.Plan.FtuChannels : l.WiredFtuChannels)</b></div>
+        </div>
+        <div class="sign"><div>Prepared by (Energy7)</div><div>Checked by (Energy7)</div><div>Railway signature</div></div>
+    </div>
+</div>
+
+<!-- 2. Location-wise (e7mriv2web layout) -->
+<div class="page">
+    <div class="hdr"><h2>Location-wise material positioning</h2><span>@Model.StationName · planned from survey, wired from Yard Config</span></div>
+    <table>
+        <thead>
+            <tr><th class="l" style="width:11%">Cluster</th><th>Data points</th><th>No_V</th><th>No_C</th><th>No_DI</th>
+                <th class="l" style="width:33%">Voltage inputs (VI)</th><th class="l" style="width:24%">Current inputs (C)</th>
+                <th>Type card</th><th>FTU type</th><th>A10 / ADC</th></tr>
+        </thead>
+        <tbody>
+        @foreach (var l in Model.Locations)
+        {
+            bool hw = l.WiredPoints.Count > 0;
+            <tr class="@(l.Gaps.Count > 0 ? "gap" : "")">
+                <td class="l"><b>@Label(l)</b>@if (!l.HasSurvey) {<span class="tag">wired only · no survey row</span>}</td>
+                <td>@(V(l) + C(l))@if (l.HasSurvey && hw && l.WiredPoints.Count != l.Plan.Voltage + l.Plan.Current) {<span class="tag">wired @l.WiredPoints.Count</span>}</td>
+                <td>@V(l)@if (l.HasSurvey && hw && l.WiredVoltageAll != l.Plan.Voltage) {<span class="tag">wired @l.WiredVoltageAll</span>}</td>
+                <td>@C(l)@if (l.HasSurvey && hw && l.WiredCurrentAll != l.Plan.Current) {<span class="tag">wired @l.WiredCurrentAll</span>}</td>
+                <td>@l.WiredDI</td>
+                <td class="list">@string.Join(", ", Inputs(l, MaterialPositioning.KindVoltage))</td>
+                <td class="list">@string.Join(", ", Inputs(l, MaterialPositioning.KindCurrent))</td>
+                <td>@(l.HasSurvey ? l.Plan.TypeCard : l.WiredTypeCard)@if (l.HasSurvey && hw && l.WiredTypeCard != l.Plan.TypeCard) {<span class="tag">wired @l.WiredTypeCard</span>}</td>
+                <td>@(l.HasSurvey ? l.Plan.FtuChannels : l.WiredFtuChannels)</td>
+                <td>@(l.HasSurvey ? l.Plan.A10.ToString() : "—")</td>
+            </tr>
+        }
+        </tbody>
+        <tfoot>
+            <tr><th class="l">Total</th><th>@Model.Locations.Sum(l => V(l) + C(l))</th><th>@Model.Locations.Sum(V)</th><th>@Model.Locations.Sum(C)</th><th>@Model.Locations.Sum(l => l.WiredDI)</th>
+                <th></th><th></th><th>C(@surveyed.Sum(l => l.Plan.CurrentCards)), MintCard(@surveyed.Sum(l => l.Plan.VoltageCards))</th>
+                <th>@Model.Locations.Sum(l => l.HasSurvey ? l.Plan.FtuChannels : l.WiredFtuChannels)</th><th>@surveyed.Sum(l => l.Plan.A10)</th></tr>
+        </tfoot>
+    </table>
+    <div class="muted">Highlighted rows: survey and Yard Config differ (see annexure). "wired n" = figure wired in Yard Config. FTU type = cards × 10 channels.</div>
+</div>
+
+<!-- 3. Asset-wise -->
+<div class="page">
+    <div class="hdr"><h2>Asset-wise material positioning</h2><span>@Model.Assets.Count assets</span></div>
+    <table>
+        <thead>
+            <tr><th class="l" style="width:9%">Asset</th><th class="l" style="width:8%">Type</th><th class="l" style="width:12%">Location(s)</th><th>No_V</th><th>No_C</th>
+                <th class="l" style="width:27%">Voltage inputs</th><th class="l" style="width:18%">Current inputs</th><th class="l" style="width:14%">Sensors</th><th>Wired V / C</th></tr>
+        </thead>
+        <tbody>
+        @foreach (var g in Model.Assets.GroupBy(a => string.IsNullOrWhiteSpace(a.AssetType) ? "OTHER (wired only)" : a.AssetType))
+        {
+            <tr><th class="l" colspan="9">@g.Key (@g.Count())</th></tr>
+            @foreach (var a in g)
+            {
+                bool hw = a.WiredVoltage + a.WiredCurrent > 0;
+                bool diff = a.InSurvey && hw && (a.WiredVoltage != a.Voltage || a.WiredCurrent != a.Current);
+                <tr class="@(diff ? "gap" : "")">
+                    <td class="l"><b>@a.Asset</b></td>
+                    <td class="l">@a.AssetType</td>
+                    <td class="list">@string.Join(", ", a.Locations.Count > 0 ? a.Locations : a.WiredLocations)
+                        @if (a.InSurvey && hw && string.Join(",", a.WiredLocations) != string.Join(",", a.Locations)) {<span class="tag">wired in @string.Join(", ", a.WiredLocations)</span>}</td>
+                    <td>@(a.InSurvey ? a.Voltage : a.WiredVoltage)</td>
+                    <td>@(a.InSurvey ? a.Current : a.WiredCurrent)</td>
+                    <td class="list">@string.Join(", ", a.VoltageInputs)</td>
+                    <td class="list">@string.Join(", ", a.CurrentInputs)</td>
+                    <td class="list">@string.Join(", ", a.Sensors.OrderBy(s => s.Key).Select(s => $"{Short(s.Key)} × {s.Value}"))</td>
+                    <td>@(hw ? $"{a.WiredVoltage} / {a.WiredCurrent}" : "—")</td>
+                </tr>
+            }
+        }
+        </tbody>
+    </table>
+</div>
+
+<!-- 4. Bill of material + rules -->
+<div class="page">
+    <div class="hdr"><h2>Station bill of material</h2><span>spare @Model.SparePercent.ToString("0.##") %</span></div>
+    <div class="two">
+        <div>
+            <table>
+                <thead><tr><th>#</th><th class="l">Material</th><th>Unit</th><th>Calculated</th><th>Spare</th><th>Required</th><th>Wired</th></tr></thead>
+                <tbody>
+                @foreach (var b in Model.Bom)
+                {
+                    <tr><td>@b.No.ToString("00")</td><td class="l">@b.Material</td><td>@b.Unit</td><td>@b.Calculated</td><td>@b.Spare</td><td><b>@b.Required</b></td><td>@(b.Actual?.ToString() ?? "—")</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <div>
+            <h3 style="margin-top:0">Calculation rules</h3>
+            <ul class="rules">
+                <li>Sensor points per gear come from AttributeSensorMapping. Datalogger attributes are not in it, so they are not planned.</li>
+                <li>Track: TR column = relay end (Vr, TPR V (Loc), Ir mA); TF column = feed end.</li>
+                <li>Signal: aspect = last word of each entry ("S-37 HG"); names starting "SH" are shunt signals; "CO" = calling-on.</li>
+                <li>Point machine: A end always; B end only for a full machine (half / series from survey point details).</li>
+                <li>Voltage card (AI / MintCard) = voltage ÷ 8 — lines 1–8 voltage, lines 9–10 current (blank on axle-counter cards).</li>
+                <li>Current card = remaining current ÷ 10. 1 card = 1 A10 = 1 ADC. FTU type = cards × 10.</li>
+                <li>Which points share a card is decided at wiring time; quantities are for planning and dispatch.</li>
+                <li>Wired-only locations (relay room, IPS …) have no survey row and are not in the planned totals.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- 5. One sheet per surveyed location -->
+@foreach (var l in surveyed)
+{
+    <div class="page">
+        <div class="hdr"><h2>@Label(l)</h2>
+            <span>@string.Join(" · ", new[] { l.LocationType, l.Power, string.IsNullOrWhiteSpace(l.Plan.Side) ? "" : "Side " + l.Plan.Side, string.IsNullOrWhiteSpace(l.Plan.DistanceFromRR) ? "" : l.Plan.DistanceFromRR + " from RR" }.Where(x => !string.IsNullOrWhiteSpace(x)))</span></div>
+        <div class="two">
+            <div>
+                <table>
+                    <thead><tr><th class="l">Material</th><th>Qty</th><th class="l">Detail</th></tr></thead>
+                    <tbody>
+                    <tr><td class="l">Voltage card (AI / MintCard)</td><td>@l.Plan.VoltageCards</td><td class="l">@l.Plan.Voltage voltage on lines 1–8@(l.Plan.AxleVoltageCards > 0 ? $"; {l.Plan.AxleVoltageCards} axle-counter card(s), lines 9–10 blank" : "")</td></tr>
+                    <tr><td class="l">Current card (C)</td><td>@l.Plan.CurrentCards</td><td class="l">@l.Plan.CurrentOnVoltageCards current on MintCard 9–10, @(l.Plan.Current - l.Plan.CurrentOnVoltageCards) on current cards</td></tr>
+                    <tr><td class="l">A10 / ADC</td><td>@l.Plan.A10</td><td class="l">1 per card · FTU type @l.Plan.FtuChannels</td></tr>
+                    @foreach (var s in l.Plan.Sensors.OrderBy(k => k.Key.StartsWith(MaterialPositioning.KindVoltage) ? 0 : 1).ThenBy(k => k.Key))
+                    {
+                        <tr><td class="l">@s.Key.Split('|')[0] sensor @s.Key.Split('|')[1]</td><td>@s.Value</td>
+                            <td class="list">@string.Join(", ", l.Plan.Points.Where(p => MaterialPositioning.SensorKey(p.Kind, p.Type) == s.Key).Select(p => $"{p.Asset}({p.Title})"))</td></tr>
+                    }
+                    <tr><td class="l">Cable conductors</td><td>@l.Plan.Conductor</td><td class="l">2V + C + 2</td></tr>
+                    <tr><td class="l muted">Spare lines</td><td class="muted">@l.Plan.SpareVoltagePins V / @l.Plan.SpareCurrentPins C</td><td class="l muted">free lines on the planned cards</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div>
+                <table>
+                    <thead><tr><th class="l">Asset</th><th>No_V</th><th>No_C</th><th class="l">Inputs</th></tr></thead>
+                    <tbody>
+                    @foreach (var a in l.Plan.Points.GroupBy(p => p.Asset))
+                    {
+                        <tr><td class="l"><b>@a.Key</b><span class="tag">@a.First().AssetType</span></td>
+                            <td>@a.Count(p => p.Kind == MaterialPositioning.KindVoltage)</td><td>@a.Count(p => p.Kind == MaterialPositioning.KindCurrent)</td>
+                            <td class="list">@string.Join(", ", a.Select(p => p.Title))</td></tr>
+                    }
+                    </tbody>
+                </table>
+                @if (l.WiredPoints.Count > 0)
+                {
+                    <h3>Wired in Yard Config — @l.WiredTypeCard</h3>
+                    <table>
+                        <thead><tr><th class="l">Card</th><th class="l">Lines</th></tr></thead>
+                        <tbody>
+                        @foreach (var c in l.WiredPoints.GroupBy(w => w.Card))
+                        {
+                            <tr><td class="l">@c.Key</td><td class="list">@string.Join(", ", c.Select(w => $"{w.Line}: {w.Asset}({w.Title})"))</td></tr>
+                        }
+                        </tbody>
+                    </table>
+                }
+                @if (l.Gaps.Count > 0 || l.Plan.Warnings.Count > 0)
+                {
+                    <h3>Remarks</h3>
+                    <ul>@foreach (var g in l.Gaps.Concat(l.Plan.Warnings)) { <li>@g</li> }</ul>
+                }
+            </div>
+        </div>
+        <div class="sign" style="margin-top:12mm"><div>Checked by</div><div>Date</div></div>
+    </div>
+}
+
+@if (warnings.Count > 0 || gapLocations.Count > 0)
+{
+    <div class="page">
+        <div class="hdr"><h2>Annexure — gaps and remarks</h2><span>@gapLocations.Count location(s) differ</span></div>
+        @if (gapLocations.Count > 0)
+        {
+            <table>
+                <thead><tr><th class="l">Location</th><th class="l">Survey vs Yard Config</th></tr></thead>
+                <tbody>@foreach (var l in gapLocations) { <tr><td class="l">@Label(l)</td><td class="l">@string.Join("; ", l.Gaps)</td></tr> }</tbody>
+            </table>
+        }
+        @if (warnings.Count > 0)
+        {
+            <h3>Remarks</h3>
+            <ul>@foreach (var w in warnings) { <li>@w</li> }</ul>
+        }
+    </div>
+}
+</body>
+</html>

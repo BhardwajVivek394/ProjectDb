@@ -9,6 +9,7 @@ namespace Domain
         public string LocationBoxNo { get; set; }
         public string LocationSide { get; set; }
         public string DistanceFromRR { get; set; }
+        public string LocToLocDist { get; set; }
         public string VC { get; set; }
         public int Cluster { get; set; }
         public string Conductor { get; set; }

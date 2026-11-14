@@ -29,6 +29,7 @@
 <!-- ═══ TABS ═══ -->
 <div class="etabs">
     <div class="etab on" data-tab="overview"><i class="bi bi-grid" style="font-size:13px"></i> Overview</div>
+    <div class="etab" data-tab="survey"><i class="bi bi-clipboard-data" style="font-size:13px"></i> Survey <span class="tc" id="tabSurveyCount">—</span></div>
     <div class="etab" data-tab="assets"><i class="bi bi-cpu" style="font-size:13px"></i> Assets <span class="tc" id="tabAssetCount">—</span></div>
     <div class="etab" data-tab="location"><i class="bi bi-geo-alt" style="font-size:13px"></i> Location <span class="tc" id="tabLocationCount">—</span></div>
     <div class="etab" data-tab="yard"><i class="bi bi-diagram-3" style="font-size:13px"></i> Yard Config</div>
@@ -121,6 +122,166 @@
                 </span>
             </h6>
             <div id="nmdlList" style="font-size:12px"><div style="color:var(--txm);font-size:11px">Select a station</div></div>
+        </div>
+    </div>
+
+    <!-- ── SURVEY ── location-wise: pick a location, add its gears one by one, counts update live.
+         Saved to the existing SiteSurvey rows (one per location box) and SurveyPointMachine through the API
+         — see StationController.SaveSurvey. Material rules = Cluster-Wise Materials Count sheet. -->
+    <div class="tp" id="tab-survey">
+        <style>
+            .sv-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+            .sv-top h6{font-size:14px;font-weight:700;margin:0;display:flex;align-items:center;gap:7px}.sv-top h6 i{color:var(--co)}
+            .sv-pill{font-size:10px;font-weight:600;padding:3px 9px;border-radius:12px;background:var(--bd-lt);color:var(--txm)}
+            .sv-pill.dirty{background:#fdf3e1;color:var(--warn)}
+            .sv-lay{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;align-items:start}
+            @@media (max-width:900px){.sv-lay{grid-template-columns:1fr}}
+            .sv-card{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(16,24,40,.04)}
+            .sv-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:8px}
+            .sv-h i{color:var(--co)}.sv-h .sp{flex:1}
+            .sv-h .sub{font-size:10px;font-weight:400;color:var(--txl)}
+            .sv-step{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:9px;background:var(--co);color:#fff;font-size:10px;font-weight:700}
+            .sv-rf{font-size:10px;font-weight:700;color:var(--txm);text-transform:uppercase;letter-spacing:.3px;margin:10px 0 4px}
+            .sv-li{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--bd);border-radius:7px;margin-bottom:5px;cursor:pointer;font-size:12px;background:#fff}
+            .sv-li:hover{border-color:var(--txl)}
+            .sv-li.on{border-color:var(--co);background:var(--co-lt)}
+            .sv-li .nm{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            .sv-li .ct{font-size:10px;color:var(--txm);white-space:nowrap}
+            .sv-li .dot{width:7px;height:7px;border-radius:4px;background:var(--bd)}.sv-li .dot.ok{background:var(--ok)}.sv-li .dot.w{background:var(--warn)}
+            .sv-f{display:grid;gap:8px;align-items:end}
+            .sv-f label{display:block;font-size:10px;font-weight:600;color:var(--txm);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
+            .sv-f input,.sv-f select{width:100%;height:32px;border:1px solid var(--bd);border-radius:7px;padding:0 9px;font-size:12px;background:#fff}
+            .sv-f input:focus,.sv-f select:focus{outline:none;border-color:var(--co)}
+            .sv-f .be7,.sv-f .bg7{height:32px}
+            .sv-head{grid-template-columns:2fr 1fr 1fr 1fr 1fr auto}
+            .sv-add{grid-template-columns:1.1fr 1.3fr 1.2fr 1.4fr auto auto;background:var(--hv);border:1px solid var(--bd-lt);border-radius:8px;padding:10px}
+            @@media (max-width:1100px){.sv-head,.sv-add{grid-template-columns:1fr 1fr}}
+            .sv-msg{font-size:11px;margin-top:6px;min-height:15px}
+            .sv-msg.e{color:var(--err)}.sv-msg.w{color:var(--warn)}
+            .sv-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 8px}
+            .sv-chip{font-size:10px;font-weight:600;padding:3px 9px;border-radius:12px;background:var(--bd-lt);color:var(--txm)}
+            .sv-chip b{color:var(--tx)}
+            .sv-t{width:100%;border-collapse:collapse;font-size:12px}
+            .sv-t th{font-size:10px;font-weight:600;color:var(--txm);text-transform:uppercase;letter-spacing:.3px;padding:6px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--bd)}
+            .sv-t td{padding:6px;border-bottom:1px solid var(--bd-lt);vertical-align:middle}
+            .sv-t td.n,.sv-t th.n{text-align:center}
+            .sv-t tr.ed td{background:var(--co-lt)}
+            .sv-t tfoot td{font-weight:700;background:var(--hv)}
+            .sv-type{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eef4fb;color:#17365d}
+            .sv-ib{border:none;background:none;color:var(--txm);cursor:pointer;font-size:13px;padding:2px 5px}.sv-ib:hover{color:var(--co)}.sv-ib.del:hover{color:var(--err)}
+            .sv-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;margin-top:10px}
+            .sv-kpi div{background:var(--hv);border:1px solid var(--bd-lt);border-radius:7px;padding:7px 9px;font-size:10px;color:var(--txm)}
+            .sv-kpi b{display:block;font-size:17px;color:var(--tx)}
+            .sv-kpi .hl{background:var(--co-lt);border-color:#f6d3ca}.sv-kpi .hl b{color:var(--co-hv)}
+            .sv-sens{display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:6px;margin-top:8px}
+            .sv-sens div{font-size:10px;color:var(--txm);border:1px dashed var(--bd);border-radius:6px;padding:5px 8px}.sv-sens b{color:var(--tx);font-size:13px;margin-left:4px}
+            .sv-iss{font-size:11px;padding:4px 9px;border-radius:6px;margin-top:5px;display:flex;gap:6px;align-items:flex-start}
+            .sv-iss.e{background:#fdecea;color:var(--err)}.sv-iss.w{background:#fdf3e1;color:var(--warn)}.sv-iss.o{background:#e6f5ef;color:var(--ok)}
+            .sv-empty{font-size:11px;color:var(--txl);padding:10px 2px;text-align:center}
+            .sv-sum{overflow-x:auto}.sv-sum .sv-t{min-width:1100px}.sv-sum td.l{max-width:180px;font-size:11px}
+            /* ── restyle: station figures strip + line diagram (mimic survey-detail look) ── */
+            .sv-figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:0;border:1px solid var(--bd);border-radius:10px;background:var(--sf);overflow:hidden;margin-bottom:12px;box-shadow:0 1px 3px rgba(16,24,40,.04)}
+            .sv-fig{padding:12px 15px;border-right:1px solid var(--bd-lt)}
+            .sv-fig:last-child{border-right:0}
+            .sv-fig b{display:block;font-size:26px;font-weight:700;line-height:1.05;color:var(--tx);font-variant-numeric:tabular-nums}
+            .sv-fig.hl b{color:var(--co-hv)}
+            .sv-fig span{display:block;font-size:11px;color:var(--txm);margin-top:5px}
+            .sv-fig small{display:block;font-size:10px;color:var(--txl);margin-top:2px}
+            .sv-diagram{border:1px solid var(--bd);border-radius:10px;background:var(--sf);padding:8px 10px 10px;margin-bottom:12px;box-shadow:0 1px 3px rgba(16,24,40,.04)}
+            .sv-diag-in{overflow-x:auto}
+            .sv-diag-in svg{display:block}
+            .sv-diag-lg{display:flex;flex-wrap:wrap;gap:16px;font-size:10px;color:var(--txm);margin-top:6px;padding:0 4px}
+            .sv-diag-lg span{display:inline-flex;align-items:center;gap:5px}
+            .sv-diag-lg i.d{width:9px;height:9px;border-radius:5px;border:2px solid var(--bd);background:#fff}
+            .sv-diag-lg i.d.on{border-color:var(--co)}
+            /* yard configuration preview (read-only, ported from Cluster-Wise sheet) */
+            .sv-yh{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px;margin-bottom:8px}
+            .sv-yh div{background:var(--co-lt);border:1px solid #f6d3ca;border-radius:7px;padding:6px 9px;font-size:10px;color:var(--txm)}
+            .sv-yh b{display:block;font-size:16px;color:var(--co-hv)}
+            .sv-t tr.sp td{color:var(--txl)}
+            .sv-muted{color:var(--txl)}
+            /* yard-config tab: suggested configuration preview panel */
+            .yc-prev{border:1px solid var(--bd);border-radius:10px;background:var(--sf);margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(16,24,40,.04)}
+            .yc-prev-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--co-lt);border-bottom:1px solid var(--bd);font-size:13px;font-weight:700}
+            .yc-prev-h i{color:var(--co)}
+            .yc-prev-sub{font-size:10px;font-weight:400;color:var(--txm)}
+            .yc-prev-chips{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+            .yc-prev-chips span{font-size:10px;font-weight:600;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:2px 9px;color:var(--co-hv)}
+            .yc-prev-body{padding:10px 14px;overflow-x:auto}
+        </style>
+        <div class="sv-top">
+            <h6><i class="bi bi-clipboard-data"></i> Station Survey</h6>
+            <span class="sv-pill" id="svStamp">Select a station</span>
+            <span style="flex:1"></span>
+            <button class="bg7" onclick="svExportCsv()" title="Export survey as CSV"><i class="bi bi-filetype-csv me-1"></i>CSV</button>
+            <button class="bg7" onclick="svExportExcel()" title="Export survey as Excel"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+            <button class="bg7" onclick="svExportPdf()" title="Print / save survey as PDF"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>
+            <button class="bg7" onclick="svReload()"><i class="bi bi-arrow-clockwise me-1"></i>Reload</button>
+            <button class="be7" id="svSaveBtn" onclick="svSave()"><i class="bi bi-cloud-check me-1"></i>Save survey</button>
+        </div>
+
+        <!-- restyle: live station figures + line diagram (locations grouped by RF cluster) -->
+        <div class="sv-figs" id="svFigs"></div>
+        <div class="sv-diagram" id="svDiagram" style="display:none"></div>
+
+        <div class="sv-lay">
+            <!-- Step 1: locations -->
+            <div class="sv-card" style="margin:0">
+                <div class="sv-h"><span class="sv-step">1</span> Locations <span class="sp"></span>
+                    <button class="bg7" style="padding:3px 10px;font-size:11px" onclick="svNewLoc()"><i class="bi bi-plus"></i> New</button></div>
+                <div id="svLocList"><div class="sv-empty">Select a station</div></div>
+            </div>
+
+            <!-- Step 2 + 3: selected location, its gears and counts -->
+            <div>
+                <div class="sv-card" id="svLocCard">
+                    <div class="sv-h"><span class="sv-step">2</span> Location details <span class="sub" id="svLocSub"></span></div>
+                    <div class="sv-f sv-head">
+                        <div><label>Location / cluster name</label><input id="svLName" placeholder="LOC-1" onchange="svLocField('name', this.value)"></div>
+                        <div><label>RF cluster</label><input id="svLRf" type="number" min="1" max="50" onchange="svLocField('rf', this.value)"></div>
+                        <div><label>Side <span style="color:var(--err)">*</span></label><input id="svLSide" placeholder="UP / DN" onchange="svLocField('side', this.value)"></div>
+                        <div><label>Dist. from RR (m) <span style="color:var(--err)">*</span></label><input id="svLDist" onchange="svLocField('dist', this.value)"></div>
+                        <div><label>Loc-to-loc dist (m)</label><input id="svLL2L" onchange="svLocField('l2l', this.value)"></div>
+                        <div><button class="bg7" title="Remove location" onclick="svDelLoc()"><i class="bi bi-trash"></i></button></div>
+                    </div>
+                    <div class="sv-msg e" id="svLocMsg"></div>
+                </div>
+
+                <div class="sv-card">
+                    <div class="sv-h"><span class="sv-step">3</span> Gears in this location <span class="sub">Type → name → configuration → Add. Press Enter to add quickly.</span></div>
+                    <div class="sv-f sv-add">
+                        <div><label>Gear type</label><select id="svGType" onchange="svTypeChanged()"></select></div>
+                        <div><label>Gear name / ID</label><input id="svGName" placeholder="117TF, S2, SH-01, P1"></div>
+                        <div id="svGCfgW"><label id="svGCfgL">Configuration</label><select id="svGCfg" onchange="svCfgChanged()"></select></div>
+                        <div id="svGSubW"><label>Point machine detail</label><select id="svGSub"></select></div>
+                        <div><button class="be7" id="svGAddBtn" onclick="svAddGear()">Add</button></div>
+                        <div><button class="bg7" id="svGCancel" onclick="svCancelEdit()" style="visibility:hidden">Cancel</button></div>
+                    </div>
+                    <div class="sv-msg" id="svGMsg"></div>
+                    <div class="sv-chips" id="svChips"></div>
+                    <div style="overflow-x:auto">
+                        <table class="sv-t">
+                            <thead><tr><th>Gear name</th><th>Type</th><th>Configuration</th><th>Material rule</th><th class="n">V</th><th class="n">C</th><th style="width:60px"></th></tr></thead>
+                            <tbody id="svGearRows"></tbody>
+                        </table>
+                    </div>
+                    <div class="sv-kpi" id="svKpi"></div>
+                    <div class="sv-sens" id="svSens"></div>
+                </div>
+
+                <div class="sv-card" id="svYardCard">
+                    <div class="sv-h"><i class="bi bi-diagram-3" style="color:var(--co)"></i> Yard configuration (preview)
+                        <span class="sub">Auto-assigned MintCard / CI / ADC / Pin from this location's gears · preview only, not saved to yard yet</span></div>
+                    <div id="svYard"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4: station summary + checks -->
+        <div class="sv-card">
+            <div class="sv-h"><span class="sv-step">4</span> Station summary <span class="sub">All locations together. Click a row to open that location.</span></div>
+            <div id="svChecks"></div>
+            <div class="sv-sum" style="margin-top:8px"><table class="sv-t" id="svSummary"></table></div>
         </div>
     </div>
 
@@ -270,29 +431,11 @@
             </div>
         </div>
 
-        <!-- Survey gear mapping (before yard) — existing SiteSurvey table, same grid as the 90 Site Survey page -->
-        <div class="cr-box" style="margin-top:14px">
-            <h6 style="display:flex;align-items:center;gap:8px">
-                <i class="bi bi-signpost-split"></i> Survey Gear Mapping (before Yard Config)
-                <button class="be7" style="margin-left:auto;padding:4px 12px" onclick="addGearRow()"><i class="bi bi-plus"></i> Add Location Box</button>
-            </h6>
-            <div style="font-size:10px;color:var(--txm);margin-bottom:8px">
-                One row per location box. Enter gear names separated by commas, e.g. TR: <b>1T, 2T</b>. Names are saved in upper case, like on the 90 site.
-            </div>
-            <div style="overflow-x:auto">
-                <table class="table table-sm" style="font-size:11px;margin:0;min-width:1100px">
-                    <thead>
-                        <tr style="color:var(--txm)">
-                            <th style="width:60px">RF Cl.</th><th style="width:110px">Location Box</th><th style="width:70px">Side</th>
-                            <th style="width:80px">Dist. RR</th><th>TR</th><th>TF</th><th>Point Machine</th><th>Signal</th>
-                            <th>Axle Counter</th><th>Bus Bar</th><th>UFSBI</th><th>BHMS</th><th style="width:90px"></th>
-                        </tr>
-                    </thead>
-                    <tbody id="gearBody"><tr><td colspan="13" style="color:var(--txm)">Select a station</td></tr></tbody>
-                </table>
-            </div>
-            <datalist id="gearLocList"></datalist>
-            <div id="gearCoverage" style="font-size:11px;margin-top:8px"></div>
+        <!-- Gear per location box is entered on the Survey tab -->
+        <div class="cr-box" style="margin-top:14px;font-size:11px;color:var(--txm);display:flex;align-items:center;gap:8px">
+            <i class="bi bi-clipboard-data" style="color:var(--co)"></i>
+            Location boxes and their gear (tracks, signals, points, axle counters) are entered on the
+            <a href="#" onclick="svOpenTab();return false" style="color:var(--co);font-weight:600">Survey</a> tab.
         </div>
 
         <!-- Edit location -->
@@ -363,39 +506,44 @@
 
     <!-- ── MATERIAL ── -->
     <div class="tp" id="tab-material">
-        <div class="stw" id="survCont">
-            <div class="stw-h">
-                <h6>Material Register</h6>
-                <div style="display:flex;gap:6px">
-                    <button class="bg7" id="fsBtn"><i class="bi bi-fullscreen"></i></button>
-                    <button class="be7"><i class="bi bi-download me-1"></i>Export</button>
-                </div>
+        <style>
+            .mp-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+            .mp-bar h6{font-size:13px;font-weight:700;margin:0}
+            .mp-bar .sp{flex:1}
+            .mp-bar label{font-size:11px;color:var(--txm)}
+            .mp-bar input{width:62px;height:30px;border:1px solid var(--bd);border-radius:7px;padding:0 8px;font-size:12px}
+            .mp-pill{font-size:10px;font-weight:600;padding:3px 10px;border-radius:16px;background:var(--co-lt);color:var(--co-hv)}
+            .mp-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:9px;margin-bottom:12px}
+            .mp-kpi .k{background:var(--sf);border:1px solid var(--bd);border-radius:7px;padding:9px 12px}
+            .mp-kpi .k .l{font-size:10px;color:var(--txm)}.mp-kpi .k .v{font-size:19px;font-weight:700}
+            .mp-sec{font-size:12px;font-weight:700;margin:12px 0 6px}
+            .mp-t td,.mp-t th{text-align:center}.mp-t td.l,.mp-t th.l{text-align:left}
+            .mp-t tbody tr.mp-row{cursor:pointer}.mp-t tbody tr.mp-row.sel td{background:var(--co-lt)}
+            .mp-gap{background:#fdf3e1;color:var(--warn);border-radius:4px;padding:1px 5px;font-weight:600}
+            .mp-det{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:12px 14px;margin-top:8px}
+            .mp-det h6{font-size:13px;font-weight:700;margin:0 0 6px}
+            .mp-why{display:flex;justify-content:space-between;gap:10px;font-size:11px;padding:5px 0;border-bottom:1px solid #f0ebe8}.mp-why span:last-child{color:var(--txm);text-align:right}
+            .mp-warn{font-size:11px;color:var(--warn);margin-top:6px}
+            .mp-empty{padding:28px;text-align:center;color:var(--txm);font-size:12px}
+            .mp-views{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}
+            .mp-chip{font-size:11px;font-weight:600;padding:5px 12px;border-radius:16px;border:1px solid var(--bd);background:#fff;color:var(--txm);cursor:pointer}
+            .mp-chip.on{background:var(--co);border-color:var(--co);color:#fff}
+            .mp-list{font-size:10px;line-height:1.5;color:var(--tx);white-space:normal;max-width:520px}
+            @@media (max-width:768px){.mp-det{grid-template-columns:1fr}}
+        </style>
+        <div class="stw" id="survCont" style="padding:12px 14px">
+            <div class="mp-bar">
+                <h6>Material Positioning</h6>
+                <span class="mp-pill" id="mpStamp" style="display:none"></span>
+                <span class="sp"></span>
+                <label for="mpSpare">Spare %</label>
+                <input type="number" id="mpSpare" min="0" max="100" step="1" value="0">
+                <button class="bg7" onclick="mpLoad()"><i class="bi bi-arrow-clockwise me-1"></i>Recalculate</button>
+                <button class="bg7" onclick="mpExportExcel()"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+                <button class="be7" onclick="mpOpenReport()"><i class="bi bi-printer me-1"></i>Report</button>
+                <button class="bg7" id="fsBtn" title="Expand"><i class="bi bi-fullscreen"></i></button>
             </div>
-            <div style="overflow-x:auto">
-                <table class="st">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Material</th>
-                            <th>Unit</th>
-                            <th class="gh">Planned</th>
-                            <th class="gh">Consumed</th>
-                            <th class="gh">Remaining</th>
-                            <th>Progress</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td class="dv">01</td><td>A10 Unit</td><td>Pcs</td><td>80</td><td>45</td><td>35</td><td><div class="mb"><div class="mb-f" style="width:56%"></div></div></td></tr>
-                        <tr><td class="dv">02</td><td>Antenna</td><td>Pcs</td><td>80</td><td>30</td><td>50</td><td><div class="mb"><div class="mb-f w" style="width:37%"></div></div></td></tr>
-                        <tr><td class="dv">03</td><td>AI Card</td><td>Pcs</td><td>35</td><td>0</td><td>35</td><td><div class="mb"><div class="mb-f d" style="width:0%"></div></div></td></tr>
-                        <tr><td class="dv">04</td><td>Cable (50m)</td><td>Rolls</td><td>20</td><td>18</td><td>2</td><td><div class="mb"><div class="mb-f" style="width:90%"></div></div></td></tr>
-                        <tr><td class="dv">05</td><td>Junction Box</td><td>Pcs</td><td>64</td><td>55</td><td>9</td><td><div class="mb"><div class="mb-f" style="width:86%"></div></div></td></tr>
-                    </tbody>
-                    <tfoot>
-                        <tr><th colspan="3">Total</th><th>279</th><th>148</th><th>131</th><th></th></tr>
-                    </tfoot>
-                </table>
-            </div>
+            <div id="mpBody"><div class="mp-empty">Select a station</div></div>
         </div>
     </div>
 
@@ -423,7 +571,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" style="padding:16px 18px">
-                <!-- Top fields: Name / Http Link / Number Of Cell / Is Active -->
+                <!-- Top fields: Name / Http Link / Is Active -->
                 <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;margin-bottom:14px;align-items:end">
                     <div>
                         <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Name <span style="color:var(--err)">*</span></label>
@@ -438,13 +586,6 @@
                         <label for="assetModalActive" style="font-size:12px;margin:0;cursor:pointer">Is Active</label>
                     </div>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-                    <div>
-                        <label style="font-size:11px;font-weight:600;color:var(--txm);display:block;margin-bottom:4px">Number Of Cell</label>
-                        <input type="number" id="assetModalCells" class="form-control form-control-sm" placeholder="0">
-                    </div>
-                </div>
-
                 <!-- Point Machine details (Asset columns, same fields as the 90 Add Asset for Point Machine) -->
                 <div id="assetModalPM" style="display:none;border:1px solid var(--bd);border-radius:7px;padding:10px 12px;margin-bottom:14px">
                     <div style="font-size:10px;font-weight:700;color:var(--co);text-transform:uppercase;margin-bottom:8px">Point Machine Details</div>
@@ -610,6 +751,10 @@
         function onStationChange(siteId) {
             // <select>.value is a string; [FromBody] int SiteId (System.Text.Json) rejects "123" → model binds as null
             siteId = parseInt(siteId, 10) || 0;
+            if (SV.dirty && siteId !== SV.siteId && !confirm('The survey of the current station has unsaved changes. Discard them?')) {
+                $('#ddStation').val(SV.siteId);   // stay on the current station
+                return;
+            }
             debugger;
             var stationName  = $('#ddStation option:selected').text();
             var zoneName     = $('#ddZone option:selected').text();
@@ -624,6 +769,7 @@
                 __locSiteId = 0; __locations = [];
                 $('#locClusters').html('<div style="font-size:11px;color:var(--txm)">Select a station</div>');
                 $('#locPool').html('<div style="font-size:10px;color:var(--txl)">Select a station</div>');
+                svReset();
                 return;
             }
 
@@ -650,9 +796,10 @@
              loadAssetTypes(siteId);
              loadSiteAssets(siteId, function () {
                  if (__siteAssetTypes.length) renderAssetTypeSidebar();   // refresh counts + list
-                 renderGearCoverage();                                     // unmapped gear needs the asset list
+                 svRender();                                               // survey checks list assets missing from the survey
              });
              loadSurveyChecklist(siteId);
+             svLoad(siteId);
              loadLocations(siteId);
              loadNMDL(siteId);
         }
@@ -678,27 +825,845 @@
                     if (!Array.isArray(res)) { $('#locClusters').html('<div style="font-size:11px;color:var(--err)">' + locEsc((res && res.error) || 'Failed to load') + '</div>'); return; }
                     __locations = res;
                     renderLocations();
-                    loadSurveyGear(siteId);
                 },
                 error: function (xhr) { $('#locClusters').html('<div style="font-size:11px;color:var(--err)">Request failed</div>'); }
             });
         }
 
-        // ── Survey gear mapping (SiteSurvey rows) ───────────────────────────────────
-        var __gearRows = [];
-        var GEAR_COLS = ['TR', 'TF', 'PointMachine', 'Signal', 'AxleCounter', 'BusBar', 'UFSBI', 'BHMS'];
+        // ══ SURVEY TAB ══════════════════════════════════════════════════════════════════
+        // Location-wise survey (same flow as the Cluster-Wise Materials Count sheet):
+        //   1. pick / create a location  2. edit its details  3. add gears one by one  4. station summary.
+        // Storage (unchanged, via the API): one SiteSurvey row per location — TF, TR, Signal ("S1 RG,S1 HG"),
+        // PointMachine, AxleCounter, BusBar, UFSBI, BHMS — plus SurveyPointMachine details. See SaveSurvey.
 
-        function loadSurveyGear(siteId) {
+        // Material rule per gear: [label, V, C, sensors (0-10V DC, 0-50V DC, 0-150V DC, 0-150V AC, 0-1A AC, 0-2A DC, 0-6A DC, 0-10A DC)]
+        var SV_RULES = {
+            tf:      ['1 TF', 4, 2, [3, 0, 0, 1, 0, 1, 1, 0]],
+            tr:      ['1 TR', 2, 1, [1, 1, 0, 0, 0, 1, 0, 0]],
+            sig2:    ['2 ASP Signal', 3, 2, [0, 1, 0, 2, 2, 0, 0, 0]],
+            sig3:    ['3 ASP Signal', 5, 3, [0, 2, 0, 3, 3, 0, 0, 0]],
+            sig4:    ['4 ASP Signal', 7, 4, [0, 3, 0, 4, 4, 0, 0, 0]],
+            route1:  ['1 Route', 2, 1, [0, 1, 0, 1, 1, 0, 0, 0]],
+            route2:  ['2 Route', 4, 2, [0, 2, 0, 2, 2, 0, 0, 0]],
+            route3:  ['3 Route', 6, 3, [0, 3, 0, 3, 3, 0, 0, 0]],
+            coon:    ['1 CO-ON', 2, 1, [0, 1, 0, 1, 1, 0, 0, 0]],
+            pmSFull: ['Series - Full Point Machine', 4, 2, [0, 2, 2, 0, 0, 0, 0, 2]],
+            pmSNorm: ['Series - Normal End with Indication', 2, 1, [0, 1, 1, 0, 0, 0, 0, 1]],
+            pmSRev:  ['Series - Reverse End with Indication', 2, 1, [0, 1, 1, 0, 0, 0, 0, 1]],
+            pmPFull: ['Parallel - Full Point Machine', 8, 4, [0, 4, 4, 0, 0, 0, 0, 4]],
+            pmPA:    ['Parallel - A End', 4, 2, [0, 2, 2, 0, 0, 0, 0, 2]],
+            pmPB:    ['Parallel - B End', 4, 2, [0, 2, 2, 0, 0, 0, 0, 2]],
+            sh1:     ['1-ASP Shunt', 2, 1, [0, 1, 0, 1, 1, 0, 0, 0]],
+            sh3:     ['3-ASP Shunt', 4, 3, [0, 1, 0, 3, 3, 0, 0, 0]]
+        };
+        var SV_SENSORS = ['(0-10)V DC', '(0-50)V DC', '(0-150)V DC', '(0-150)V AC', '(0-1)A AC', '(0-2)A DC', '(0-6)A DC', '(0-10)A DC'];
+
+        // Gear types: col = SiteSurvey column, cfg = configuration options → [rule key, aspects stored in the Signal column]
+        var SV_TYPES = {
+            // Track is a UI-only grouping: the user picks "Track", then its asset type (TF / TR).
+            // On add it is remapped to the real TF / TR type below, so storage and all downstream logic are unchanged.
+            Track:  { label: 'Track', ph: '117TF', cfgLabel: 'Track asset type', cfg: { 'TF': 1, 'TR': 1 } },
+            TF:     { label: 'TF', col: 'TF', rule: 'tf', ph: '117TF', real: true },
+            TR:     { label: 'TR', col: 'TR', rule: 'tr', ph: '117TR', real: true },
+            Signal: { label: 'Signal', col: 'Signal', ph: 'S2', cfgLabel: 'Aspects',
+                      cfg: { '2-ASP': ['sig2', ['RG', 'HG']], '3-ASP': ['sig3', ['RG', 'HG', 'DG']], '4-ASP': ['sig4', ['RG', 'HG', 'HHG', 'DG']] } },
+            Shunt:  { label: 'Shunt', col: 'Signal', ph: 'SH-01', cfgLabel: 'Aspects',
+                      cfg: { '1-ASP': ['sh1', ['PG']], '3-ASP': ['sh3', ['RG', 'DG', 'PG']] } },
+            Route:  { label: 'Route', col: 'Signal', ph: 'S2', cfgLabel: 'Routes',
+                      cfg: { '1 Route': ['route1', ['UGA']], '2 Route': ['route2', ['UGA', 'UGB']], '3 Route': ['route3', ['UGA', 'UGB', 'UGC']] } },
+            'CO-ON': { label: 'CO-ON (calling-on)', col: 'Signal', rule: 'coon', ph: 'C1', asp: ['HG'] },
+            Point:  { label: 'Point machine', col: 'PointMachine', ph: 'P1', cfgLabel: 'Operation', cfg: { 'Series': 1, 'Parallel': 1 } },
+            AC:     { label: 'Axle counter', col: 'AxleCounter', ph: 'AC1' },
+            BusBar: { label: 'Bus bar', col: 'BusBar', ph: 'BB1' },
+            UFSBI:  { label: 'UFSBI', col: 'UFSBI', ph: 'UF1' },
+            BHMS:   { label: 'BHMS', col: 'BHMS', ph: 'BH1' }
+        };
+        var SV_PM_SUB = {
+            Series:   { 'Full Point Machine': 'pmSFull', 'Normal End with Indication': 'pmSNorm', 'Reverse End with Indication': 'pmSRev' },
+            Parallel: { 'Full Point Machine': 'pmPFull', 'A End': 'pmPA', 'B End': 'pmPB' }
+        };
+        var SV_SIG_TYPES = ['Signal', 'Shunt', 'CO-ON'];        // share one name space in the Signal column
+        var SV_ROUTE_ASP = ['UG', 'UGA', 'UGB', 'UGC', 'UGD', 'ASIN'];
+
+        var SV = svEmpty();
+        var SVSEL = null;      // key of the selected location
+        var SVEDIT = null;     // gear being edited (object) or null
+
+        function svEmpty() { return { siteId: 0, loaded: false, dirty: false, seq: 0, locs: [], pms: {} }; }
+        function svList(v) {
+            return String(v == null ? '' : v).split(',').map(function (x) { return x.trim().replace(/\s+/g, ' ').toUpperCase(); })
+                                               .filter(function (x) { return x; });
+        }
+        function svUp(v) { return String(v == null ? '' : v).trim().replace(/\s+/g, ' ').toUpperCase(); }
+        function svNatural(a, b) { return String(a).localeCompare(String(b), undefined, { numeric: true }); }
+        function svLoc(k) { return SV.locs.filter(function (l) { return l.k === k; })[0] || null; }
+        function svOpenTab() { $('.etab[data-tab="survey"]').trigger('click'); }
+
+        // ── Rule / configuration of one gear ──
+        function svRuleKey(g) {
+            var t = SV_TYPES[g.type];
+            if (!t) return null;
+            if (t.rule) return t.rule;
+            if (g.type === 'Point') return (SV_PM_SUB[g.cfg] || {})[g.sub] || null;
+            return t.cfg && t.cfg[g.cfg] ? t.cfg[g.cfg][0] : null;
+        }
+        function svCfgText(g) {
+            if (g.type === 'Point') return g.cfg + ' / ' + g.sub;
+            if (g.cfg) return g.cfg;
+            if (g.asp && g.asp.length && SV_TYPES[g.type].col === 'Signal') return 'Stored: ' + g.asp.join(', ');
+            return '—';
+        }
+        function svCalc(gears) {
+            var r = { v: 0, c: 0, sensors: [0, 0, 0, 0, 0, 0, 0, 0] };
+            gears.forEach(function (g) {
+                var rule = SV_RULES[svRuleKey(g)];
+                if (!rule) return;
+                r.v += rule[1]; r.c += rule[2];
+                rule[3].forEach(function (n, i) { r.sensors[i] += n; });
+            });
+            r.cards = svCards(r.v, r.c);
+            return r;
+        }
+
+        // AI / CI card + Buckel rule (from the Cluster-Wise Materials Count sheet).
+        // AI card = 8 voltage pins (P1-8) + 2 current pins (P9-10), CI card = 10 current pins.
+        // Current goes on AI first (free P1-8 via Buckel, then P9-10); if a CI card is needed, CI is filled first.
+        function svCards(V, C) {
+            var z = { ai: 0, ci: 0, buckel: 0, total: 0 };
+            if (!V && !C) return z;
+            if (!V) { var c0 = Math.ceil(C / 10); return { ai: 0, ci: c0, buckel: 0, total: c0 }; }
+            var ai = Math.ceil(V / 8), free = 8 * ai - V, reserved = 2 * ai, cap = free + reserved;
+            if (C <= cap) return { ai: ai, ci: 0, buckel: Math.min(C, free), total: ai };
+            var ci = Math.ceil((C - cap) / 10), rest = C - Math.min(C, 10 * ci);
+            return { ai: ai, ci: ci, buckel: Math.min(rest, free), total: ai + ci };
+        }
+
+        // ── Load ──
+        function svReset(msg) {
+            SV = svEmpty(); SVSEL = null; SVEDIT = null;
+            $('#svLocList').html('<div class="sv-empty">' + locEsc(msg || 'Select a station') + '</div>');
+            $('#svGearRows').html(''); $('#svKpi,#svSens,#svChips,#svChecks,#svSummary,#svLocSub,#svLocMsg,#svGMsg').html('');
+            $('#svFigs').html(''); $('#svDiagram').hide().html('');
+            $('#svLName,#svLRf,#svLSide,#svLDist,#svLL2L').val('');
+            $('#svStamp').text(msg || 'Select a station').removeClass('dirty');
+            $('#tabSurveyCount').text('—');
+        }
+
+        function svReload() {
+            if (!SV.siteId) { E7.warn('Select a station first'); return; }
+            if (SV.dirty && !confirm('Discard unsaved survey changes and reload?')) return;
+            svLoad(SV.siteId);
+        }
+
+        function svLoad(siteId, keepSel) {
+            var selName = keepSel && svLoc(SVSEL) ? svLoc(SVSEL).name : null;
+            svReset('Loading…');
+            SV.siteId = siteId;
             $.ajax({
-                url: '@Url.Action("GetSurveyGear", "Station")',
+                url: '@Url.Action("GetSurvey", "Station")',
                 data: { siteId: siteId },
                 success: function (res) {
-                    if (siteId != __locSiteId) return;
-                    if (!Array.isArray(res)) { $('#gearBody').html('<tr><td colspan="13" style="color:var(--err)">' + locEsc((res && res.error) || 'Failed to load') + '</td></tr>'); return; }
-                    __gearRows = res;
-                    renderGear();
+                    if (siteId != SV.siteId) return;
+                    if (!res || res.error || !Array.isArray(res.rows)) { svReset((res && res.error) || 'Failed to load the survey'); SV.siteId = siteId; return; }
+                    svFromRows(res.rows, res.pms || []);
+                    SV.loaded = true; SV.dirty = false;
+                    var keep = SV.locs.filter(function (l) { return l.name === selName; })[0];
+                    SVSEL = keep ? keep.k : (SV.locs[0] ? SV.locs[0].k : null);
+                    svTypeOptions(); svTypeChanged();
+                    svRender();
+                },
+                error: function () { svReset('Request failed'); SV.siteId = siteId; }
+            });
+        }
+
+        // SiteSurvey rows → locations with a gear list
+        function svFromRows(rows, pms) {
+            pms.forEach(function (p) { SV.pms[svUp(p.name)] = p; });
+            rows.slice().sort(function (a, b) { return (a.cluster - b.cluster) || svNatural(a.locationBoxNo, b.locationBoxNo); })
+                .forEach(function (r) {
+                    var loc = { k: 'L' + (++SV.seq), id: r.id, name: svUp(r.locationBoxNo), rf: r.cluster || '', side: r.locationSide || '', dist: r.distanceFromRR || '', l2l: gearVal(r, 'LocToLocDist') || '', gears: [] };
+                    function add(type, name, extra) { loc.gears.push($.extend({ type: type, name: name }, extra || {})); }
+                    svList(gearVal(r, 'TF')).forEach(function (n) { add('TF', n); });
+                    svList(gearVal(r, 'TR')).forEach(function (n) { add('TR', n); });
+                    svSignalsFromEntries(svList(gearVal(r, 'Signal'))).forEach(function (g) { loc.gears.push(g); });
+                    svList(gearVal(r, 'PointMachine')).forEach(function (n) {
+                        var d = SV.pms[n] || {}, series = !!d.isSeriesOpration;
+                        var sub = !d.isHalfPointMachine ? 'Full Point Machine'
+                                : series ? (d.seriesOprationTypeId == 2 ? 'Reverse End with Indication' : 'Normal End with Indication')
+                                         : (d.seriesOprationTypeId == 2 ? 'B End' : 'A End');
+                        add('Point', n, { cfg: series ? 'Series' : 'Parallel', sub: sub });
+                    });
+                    svList(gearVal(r, 'AxleCounter')).forEach(function (n) { add('AC', n); });
+                    ['BusBar', 'UFSBI', 'BHMS'].forEach(function (col) { svList(gearVal(r, col)).forEach(function (n) { add(col, n); }); });
+                    SV.locs.push(loc);
+                });
+        }
+
+        // "S1 RG,S1 HG,S1 UGA,SH1 PG" → Signal / Route / Shunt / CO-ON gears (aspects kept as stored)
+        function svSignalsFromEntries(entries) {
+            var by = {}, order = [];
+            entries.forEach(function (e) {
+                var p = e.split(' '), n = p[0], a = p.length > 1 ? p[p.length - 1] : '';
+                if (!by[n]) { by[n] = []; order.push(n); }
+                if (a && by[n].indexOf(a) < 0) by[n].push(a);
+            });
+            var out = [];
+            order.forEach(function (n) {
+                var asp = by[n], route = asp.filter(function (a) { return SV_ROUTE_ASP.indexOf(a) >= 0; });
+                var rest = asp.filter(function (a) { return SV_ROUTE_ASP.indexOf(a) < 0; });
+                if (route.length) out.push({ type: 'Route', name: n, asp: route, cfg: route.length <= 3 ? route.length + ' Route' : '' });
+                if (!rest.length) return;
+                if (rest.indexOf('PG') >= 0) out.push({ type: 'Shunt', name: n, asp: rest, cfg: rest.length === 1 ? '1-ASP' : rest.length === 3 ? '3-ASP' : '' });
+                else if (rest.length === 1 && rest[0] === 'HG') out.push({ type: 'CO-ON', name: n, asp: rest });
+                else out.push({ type: 'Signal', name: n, asp: rest, cfg: rest.length >= 2 && rest.length <= 4 ? rest.length + '-ASP' : '' });
+            });
+            return out;
+        }
+
+        // ── Location list (step 1) ──
+        function svRenderLocs() {
+            if (!SV.locs.length) { $('#svLocList').html('<div class="sv-empty">No locations yet.<br>Click <b>New</b> to add the first one.</div>'); return; }
+            var groups = {};
+            SV.locs.forEach(function (l) { var rf = parseInt(l.rf, 10) || 0; (groups[rf] = groups[rf] || []).push(l); });
+            $('#svLocList').html(Object.keys(groups).sort(function (a, b) { return a - b; }).map(function (rf) {
+                return '<div class="sv-rf">' + (rf > 0 ? 'RF cluster ' + rf : 'No RF cluster') + '</div>'
+                    + groups[rf].map(function (l) {
+                        var c = svCalc(l.gears);
+                        return '<div class="sv-li' + (l.k === SVSEL ? ' on' : '') + '" onclick="svSelect(\'' + l.k + '\')">'
+                            + '<span class="dot ' + (l.gears.length ? 'ok' : 'w') + '"></span>'
+                            + '<span class="nm">' + locEsc(l.name || '(no name)') + '</span>'
+                            + '<span class="ct">' + l.gears.length + ' gear · ' + c.cards.total + ' cards</span></div>';
+                    }).join('');
+            }).join(''));
+        }
+
+        function svSelect(k) {
+            if (SVEDIT) svCancelEdit();
+            SVSEL = k;
+            svRender();
+            $('#svGName').trigger('focus');
+        }
+
+        function svNewLoc() {
+            if (!SV.loaded) { E7.warn('Select a station first'); return; }
+            var last = SV.locs[SV.locs.length - 1], n = SV.locs.length + 1, name;
+            do { name = 'LOC-' + n++; } while (SV.locs.some(function (l) { return l.name === name; }));
+            var loc = { k: 'L' + (++SV.seq), id: 0, name: name, rf: last ? last.rf : 1, side: '', dist: '', l2l: '', gears: [] };
+            SV.locs.push(loc);
+            SVSEL = loc.k; SV.dirty = true;
+            svRender();
+            $('#svLName').trigger('focus').trigger('select');
+        }
+
+        function svDelLoc() {
+            var l = svLoc(SVSEL);
+            if (!l) return;
+            if (!confirm('Remove location ' + l.name + (l.gears.length ? ' and its ' + l.gears.length + ' gear(s)' : '') + '? It is deleted when you press Save survey.')) return;
+            SV.locs = SV.locs.filter(function (x) { return x !== l; });
+            SVSEL = SV.locs[0] ? SV.locs[0].k : null; SV.dirty = true;
+            svRender();
+        }
+
+        // ── Location details (step 2) ──
+        function svLocField(f, v) {
+            var l = svLoc(SVSEL);
+            if (!l) return;
+            var msg = '';
+            if (f === 'name') {
+                v = svUp(v);
+                if (!v) msg = 'Enter a location name.';
+                else if (/[\/,]/.test(v)) msg = 'A location name cannot contain "/" or ",".';
+                else if (SV.locs.some(function (x) { return x !== l && x.name === v; })) msg = 'Location ' + v + ' already exists.';
+                if (msg) { $('#svLName').val(l.name); $('#svLocMsg').text(msg); return; }
+            }
+            if (f === 'rf') {
+                var n = parseInt(v, 10);
+                if (!(n >= 1 && n <= 50)) { $('#svLRf').val(l.rf); $('#svLocMsg').text('RF cluster must be 1 to 50.'); return; }
+                v = n;
+            }
+            $('#svLocMsg').text('');
+            l[f] = f === 'name' ? v : String(v).trim();
+            SV.dirty = true;
+            svRender();
+        }
+
+        // ── Gear form (step 3) ──
+        function svTypeOptions() {
+            $('#svGType').html(Object.keys(SV_TYPES).filter(function (k) { return !SV_TYPES[k].real; })
+                .map(function (k) { return '<option value="' + k + '">' + SV_TYPES[k].label + '</option>'; }).join(''));
+        }
+        function svTypeChanged() {
+            var t = SV_TYPES[$('#svGType').val()] || SV_TYPES.TF;
+            $('#svGName').attr('placeholder', t.ph);
+            if (t.cfg) {
+                $('#svGCfgL').text(t.cfgLabel);
+                $('#svGCfg').html(Object.keys(t.cfg).map(function (o) { return '<option>' + o + '</option>'; }).join(''));
+                $('#svGCfgW').css('visibility', 'visible');
+            } else { $('#svGCfg').html(''); $('#svGCfgW').css('visibility', 'hidden'); }
+            svCfgChanged();
+            $('#svGMsg').text('').attr('class', 'sv-msg');
+        }
+        function svCfgChanged() {
+            if ($('#svGType').val() === 'Track') { var tt = SV_TYPES[$('#svGCfg').val()]; if (tt) $('#svGName').attr('placeholder', tt.ph); }
+            var subs = $('#svGType').val() === 'Point' ? SV_PM_SUB[$('#svGCfg').val()] : null;
+            if (subs) { $('#svGSub').html(Object.keys(subs).map(function (o) { return '<option>' + o + '</option>'; }).join('')); $('#svGSubW').css('visibility', 'visible'); }
+            else { $('#svGSub').html(''); $('#svGSubW').css('visibility', 'hidden'); }
+        }
+        function svGMsg(text, lvl) { $('#svGMsg').text(text || '').attr('class', 'sv-msg ' + (lvl || '')); }
+
+        // Same name rules the API enforces, checked right when the gear is added
+        function svGearClash(g, skip) {
+            var t = SV_TYPES[g.type], hit = null;
+            SV.locs.forEach(function (l) {
+                l.gears.forEach(function (x) {
+                    if (hit || x === skip || x.name !== g.name) return;
+                    var where = l.k === SVSEL ? 'this location' : l.name;
+                    if (x.type === g.type && (g.type !== 'AC' || l.k === SVSEL)) hit = t.label + ' ' + g.name + ' is already in ' + where + '.';
+                    else if (SV_SIG_TYPES.indexOf(x.type) >= 0 && SV_SIG_TYPES.indexOf(g.type) >= 0)
+                        hit = g.name + ' is already a ' + SV_TYPES[x.type].label + ' in ' + where + '. Use another name.';
+                    else if (g.type === 'Route' && SV_SIG_TYPES.indexOf(x.type) >= 0 && l.k !== SVSEL)
+                        hit = 'Signal ' + g.name + ' is in ' + l.name + '. Add its route in that location.';
+                    else if (x.type === 'Route' && SV_SIG_TYPES.indexOf(g.type) >= 0 && l.k !== SVSEL)
+                        hit = 'Route ' + g.name + ' is in ' + l.name + '. Add the signal in that location.';
+                });
+            });
+            return hit;
+        }
+
+        function svAddGear() {
+            var l = svLoc(SVSEL);
+            if (!l) { svGMsg('Select or create a location first.', 'e'); return; }
+            var type = $('#svGType').val();
+            if (type === 'Track') type = $('#svGCfg').val();   // Track grouping → real asset type (TF / TR)
+            var t = SV_TYPES[type], name = svUp($('#svGName').val());
+            if (!name) { svGMsg('Enter the gear name / ID.', 'e'); $('#svGName').trigger('focus'); return; }
+            if (/,/.test(name)) { svGMsg('A gear name cannot contain a comma.', 'e'); return; }
+            if (t.col === 'Signal' && / /.test(name)) { svGMsg('Signal names cannot contain spaces (S2, not "S 2").', 'e'); return; }
+            var g = { type: type, name: name };
+            if (t.cfg) g.cfg = $('#svGCfg').val();
+            if (type === 'Point') g.sub = $('#svGSub').val();
+            if (t.col === 'Signal') g.asp = (t.cfg ? t.cfg[g.cfg][1] : t.asp).slice();
+            var clash = svGearClash(g, SVEDIT);
+            if (clash) { svGMsg(clash, 'e'); return; }
+            if (SVEDIT) { var i = l.gears.indexOf(SVEDIT); if (i >= 0) l.gears[i] = g; else l.gears.push(g); }
+            else l.gears.push(g);
+            var rule = SV_RULES[svRuleKey(g)];
+            svCancelEdit();
+            svGMsg(t.label + ' ' + name + ' added' + (rule ? ' (' + rule[1] + ' V, ' + rule[2] + ' C).' : ' (recorded only, no material rule).'), rule ? '' : 'w');
+            SV.dirty = true;
+            svRender();
+            $('#svGName').trigger('focus');
+        }
+
+        function svEditGear(i) {
+            var l = svLoc(SVSEL), g = l && l.gears[i];
+            if (!g) return;
+            SVEDIT = g;
+            if (g.type === 'TF' || g.type === 'TR') { $('#svGType').val('Track'); svTypeChanged(); $('#svGCfg').val(g.type); svCfgChanged(); }
+            else { $('#svGType').val(g.type); svTypeChanged(); }
+            $('#svGName').val(g.name);
+            if (g.cfg) { $('#svGCfg').val(g.cfg); svCfgChanged(); }
+            if (g.sub) $('#svGSub').val(g.sub);
+            $('#svGAddBtn').text('Update'); $('#svGCancel').css('visibility', 'visible');
+            svRenderGears();
+            $('#svGName').trigger('focus');
+        }
+        function svCancelEdit() {
+            SVEDIT = null;
+            $('#svGName').val('');
+            $('#svGAddBtn').text('Add'); $('#svGCancel').css('visibility', 'hidden');
+            svGMsg('');
+            svRenderGears();
+        }
+        function svDelGear(i) {
+            var l = svLoc(SVSEL), g = l && l.gears[i];
+            if (!g || !confirm('Remove ' + SV_TYPES[g.type].label + ' ' + g.name + '?')) return;
+            if (SVEDIT === g) svCancelEdit();
+            l.gears.splice(i, 1); SV.dirty = true;
+            svRender();
+        }
+        $(document).on('keydown', '#svGName', function (e) { if (e.key === 'Enter') { e.preventDefault(); svAddGear(); } });
+
+        function svRenderGears() {
+            var l = svLoc(SVSEL);
+            if (!l) { $('#svGearRows').html('<tr><td colspan="7" class="sv-empty">Select or create a location.</td></tr>'); return; }
+            $('#svGearRows').html(l.gears.length ? l.gears.map(function (g, i) {
+                var rule = SV_RULES[svRuleKey(g)];
+                return '<tr' + (g === SVEDIT ? ' class="ed"' : '') + '><td><b>' + locEsc(g.name) + '</b></td>'
+                    + '<td><span class="sv-type">' + SV_TYPES[g.type].label + '</span></td>'
+                    + '<td>' + locEsc(svCfgText(g)) + '</td>'
+                    + '<td style="color:' + (rule ? 'var(--tx)' : 'var(--txl)') + '">' + (rule ? rule[0] : 'Recorded only') + '</td>'
+                    + '<td class="n">' + (rule ? rule[1] : 0) + '</td><td class="n">' + (rule ? rule[2] : 0) + '</td>'
+                    + '<td style="white-space:nowrap"><button class="sv-ib" title="Edit" onclick="svEditGear(' + i + ')"><i class="bi bi-pencil"></i></button>'
+                    + '<button class="sv-ib del" title="Remove" onclick="svDelGear(' + i + ')"><i class="bi bi-trash"></i></button></td></tr>';
+            }).join('') : '<tr><td colspan="7" class="sv-empty">No gears in this location yet. Add the first one above.</td></tr>');
+        }
+
+        function svRenderDetail() {
+            var l = svLoc(SVSEL);
+            $('#svLName,#svLRf,#svLSide,#svLDist,#svLL2L,#svGType,#svGName,#svGCfg,#svGSub,#svGAddBtn').prop('disabled', !l);
+            if (!l) { $('#svLName,#svLRf,#svLSide,#svLDist,#svLL2L').val(''); $('#svLocSub,#svChips,#svKpi,#svSens,#svYard').html(''); svRenderGears(); return; }
+            $('#svLName').val(l.name); $('#svLRf').val(l.rf); $('#svLSide').val(l.side); $('#svLDist').val(l.dist); $('#svLL2L').val(l.l2l || '');
+            $('#svLocSub').text(l.id ? '' : 'new — saved with Save survey');
+            var counts = {};
+            l.gears.forEach(function (g) { counts[g.type] = (counts[g.type] || 0) + 1; });
+            $('#svChips').html(Object.keys(SV_TYPES).filter(function (k) { return counts[k]; })
+                .map(function (k) { return '<span class="sv-chip">' + SV_TYPES[k].label + ' <b>' + counts[k] + '</b></span>'; }).join('')
+                + '<span class="sv-chip">Total gears <b>' + l.gears.length + '</b></span>');
+            svRenderGears();
+            var c = svCalc(l.gears);
+            $('#svKpi').html([['Total V', c.v], ['Total C', c.c], ['V + C', c.v + c.c], ['AI cards', c.cards.ai, 1], ['CI cards', c.cards.ci, 1], ['Buckel', c.cards.buckel], ['Total cards', c.cards.total, 1]]
+                .map(function (x) { return '<div' + (x[2] ? ' class="hl"' : '') + '>' + x[0] + '<b>' + x[1] + '</b></div>'; }).join(''));
+            $('#svSens').html(SV_SENSORS.map(function (s, i) { return '<div>' + s + '<b>' + c.sensors[i] + '</b></div>'; }).join(''));
+            svRenderYardPreview();
+        }
+
+        // ── Checks + station summary (step 4) ──
+        function svIssues() {
+            var out = [], tf = {}, tr = {}, all = { Signal: {}, Point: {} };
+            SV.locs.forEach(function (l) {
+                if (!l.gears.length) out.push(['w', l.name + ' has no gears yet.']);
+                if (!(parseInt(l.rf, 10) >= 1)) out.push(['e', l.name + ' needs an RF cluster.']);
+                // Side and Dist. from RR are required by the SiteSurvey model (NOT NULL), so block the save here
+                if (!String(l.side == null ? '' : l.side).trim()) out.push(['e', l.name + ' needs a Side (UP / DN / CENTRAL).']);
+                if (!String(l.dist == null ? '' : l.dist).trim()) out.push(['e', l.name + ' needs Dist. from RR (m).']);
+                l.gears.forEach(function (g) {
+                    if (g.type === 'TF') tf[g.name] = l.name;
+                    if (g.type === 'TR') tr[g.name] = l.name;
+                    if (g.type === 'Signal') all.Signal[g.name] = 1;
+                    if (g.type === 'Point') all.Point[g.name] = 1;
+                    if (SV_TYPES[g.type].cfg && !svRuleKey(g)) out.push(['w', SV_TYPES[g.type].label + ' ' + g.name + ' in ' + l.name + ' has stored aspects (' + (g.asp || []).join(', ') + ') that match no configuration. Edit it to pick one.']);
+                });
+            });
+            Object.keys(tr).forEach(function (n) { if (!tf[n.replace(/TR$/, 'TF')] && !tf[n]) out.push(['w', 'Track ' + n + ' (TR in ' + tr[n] + ') has no TF end in any location.']); });
+            Object.keys(tf).forEach(function (n) { if (!tr[n.replace(/TF$/, 'TR')] && !tr[n]) out.push(['w', 'Track ' + n + ' (TF in ' + tf[n] + ') has no TR end in any location.']); });
+            var rfs = SV.locs.map(function (l) { return parseInt(l.rf, 10); }).filter(function (n) { return n >= 1; });
+            var max = rfs.length ? Math.max.apply(null, rfs) : 0;
+            for (var n = 1; n < max; n++) if (rfs.indexOf(n) < 0) out.push(['w', 'No location is in RF cluster ' + n + '.']);
+            if (__siteAssetsLoaded) {
+                function missing(typeId, set) {
+                    return __siteAssets.filter(function (a) { return a.assetTypeId === typeId && !set[svUp(a.name)]; }).map(function (a) { return a.name; });
+                }
+                var trk = {}; Object.keys(tf).concat(Object.keys(tr)).forEach(function (n) { trk[n] = 1; trk[n.replace(/T[FR]$/, 'T')] = 1; });
+                [[1, 'Tracks', trk], [2, 'Signals', all.Signal], [3, 'Point machines', all.Point]].forEach(function (x) {
+                    var m = missing(x[0], x[2]);
+                    if (m.length) out.push(['w', x[1] + ' in Assets but not in the survey (' + m.length + '): ' + m.join(', ')]);
+                });
+            }
+            return out;
+        }
+
+        function svRenderSummary() {
+            var issues = svIssues(), ic = { e: 'bi-x-circle', w: 'bi-exclamation-triangle', o: 'bi-check-circle' };
+            $('#svChecks').html(issues.length ? issues.map(function (w) { return '<div class="sv-iss ' + w[0] + '"><i class="bi ' + ic[w[0]] + '"></i><span>' + locEsc(w[1]) + '</span></div>'; }).join('')
+                : (SV.locs.length ? '<div class="sv-iss o"><i class="bi bi-check-circle"></i><span>No issues found.</span></div>' : ''));
+            if (!SV.locs.length) { $('#svSummary').html(''); return; }
+            var cols = [['TF', 'TF'], ['TR', 'TR'], ['Signal', 'Signals'], ['Shunt', 'Shunts'], ['Route', 'Routes'], ['CO-ON', 'CO-ON'], ['Point', 'Points'], ['AC', 'Axle ctr']];
+            var T = { v: 0, c: 0, ai: 0, ci: 0, buckel: 0, total: 0, s: [0, 0, 0, 0, 0, 0, 0, 0] };
+            var body = SV.locs.slice().sort(function (a, b) { return (a.rf - b.rf) || svNatural(a.name, b.name); }).map(function (l) {
+                var c = svCalc(l.gears);
+                T.v += c.v; T.c += c.c; T.ai += c.cards.ai; T.ci += c.cards.ci; T.buckel += c.cards.buckel; T.total += c.cards.total;
+                c.sensors.forEach(function (n, i) { T.s[i] += n; });
+                return '<tr style="cursor:pointer" onclick="svSelect(\'' + l.k + '\');document.getElementById(\'svLocCard\').scrollIntoView({behavior:\'smooth\'})">'
+                    + '<td><b>' + locEsc(l.name) + '</b></td><td class="n">' + locEsc(l.rf) + '</td>'
+                    + cols.map(function (x) {
+                        return '<td class="l">' + (locEsc(l.gears.filter(function (g) { return g.type === x[0]; })
+                            .map(function (g) { return g.name + (g.cfg && x[0] !== 'TF' && x[0] !== 'TR' ? ' (' + (g.type === 'Point' ? g.cfg + ' / ' + g.sub : g.cfg) + ')' : ''); }).join(', ')) || '<span style="color:var(--txl)">—</span>') + '</td>';
+                    }).join('')
+                    + c.sensors.map(function (n) { return '<td class="n">' + (n ? n : '<span style="color:var(--txl)">—</span>') + '</td>'; }).join('')
+                    + '<td class="n">' + c.v + '</td><td class="n">' + c.c + '</td><td class="n">' + c.cards.ai + '</td><td class="n">' + c.cards.ci + '</td><td class="n">' + c.cards.buckel + '</td><td class="n"><b>' + c.cards.total + '</b></td></tr>';
+            }).join('');
+            $('#svSummary').html('<thead><tr><th>Location</th><th class="n">RF</th>' + cols.map(function (x) { return '<th>' + x[1] + '</th>'; }).join('')
+                + SV_SENSORS.map(function (s) { return '<th class="n">' + s + '</th>'; }).join('')
+                + '<th class="n">V</th><th class="n">C</th><th class="n">AI</th><th class="n">CI</th><th class="n">Buckel</th><th class="n">Cards</th></tr></thead><tbody>' + body + '</tbody>'
+                + '<tfoot><tr><td colspan="' + (cols.length + 2) + '"><b>Station total</b></td>'
+                + T.s.map(function (n) { return '<td class="n"><b>' + n + '</b></td>'; }).join('')
+                + '<td class="n">' + T.v + '</td><td class="n">' + T.c + '</td><td class="n">' + T.ai + '</td><td class="n">' + T.ci + '</td><td class="n">' + T.buckel + '</td><td class="n">' + T.total + '</td></tr></tfoot>');
+        }
+
+        // ══ Yard configuration PREVIEW (ported from the Cluster-Wise Materials sheet) ════════════
+        // Read-only: computes the MintCard(AI)/CI/ADC/Pin layout for the selected location's gears.
+        // Card count reuses svCards() (same optimiseAICICards rule). NOTHING is written to the DB here.
+        //   Voltage → AI pins 1-8 · Current → CI pins first, then AI 1-8 (Buckel=Yes), then AI 9-10.
+        var SVY_TF = [
+            { kind: 'V', description: 'Track Feed Charger I/P Voltage', parameter: 'VTC TFC I/P', sensor: '0-150 V AC' },
+            { kind: 'V', description: 'Track Feed Charger O/P Voltage (on load)', parameter: 'VTC TFC O/P', sensor: '0-10 V DC' },
+            { kind: 'C', description: 'Track Feed Charger O/P Current', parameter: 'ITC TFC O/P', sensor: '0-6 A DC' },
+            { kind: 'V', description: 'Voltage drop at Feed End Choke', parameter: 'VTC CH FEED END', sensor: '0-10 V DC' },
+            { kind: 'V', description: 'Track Feed End Voltage (to Rails)', parameter: 'VTC FEED END', sensor: '0-10 V DC' },
+            { kind: 'C', description: 'Track Feed Current', parameter: 'ITC FEED END', sensor: '0-2 A DC' }
+        ];
+        var SVY_TR = [
+            { kind: 'V', description: 'Track Relay End V (from Rails)', parameter: 'VTC RELAY END', sensor: '0-10 V DC' },
+            { kind: 'C', description: 'Track Relay End Current', parameter: 'ITC RELAY END', sensor: '0-2 A DC' },
+            { kind: 'V', description: '24 V DC going to TPR after TR pick up', parameter: 'VTC 24 V DC LOC', sensor: '0-50 V DC' }
+        ];
+        var SVY_SIG = {
+            hpr: { kind: 'V', description: 'HPR Voltage', parameter: 'VSig HPR', sensor: '0-50 V DC' },
+            dpr: { kind: 'V', description: 'DPR Voltage', parameter: 'VSig DPR', sensor: '0-50 V DC' },
+            hhpr: { kind: 'V', description: 'HHPR Voltage', parameter: 'VSig HHPR', sensor: '0-50 V DC' },
+            dgV: { kind: 'V', description: 'Green Aspect Voltage', parameter: 'VSig DG', sensor: '0-150 V AC' },
+            hgV: { kind: 'V', description: 'Yellow Aspect Voltage', parameter: 'VSig HG', sensor: '0-150 V AC' },
+            hhgV: { kind: 'V', description: 'Double Yellow Aspect Voltage', parameter: 'VSig HHG', sensor: '0-150 V AC' },
+            rgV: { kind: 'V', description: 'Red Aspect Voltage', parameter: 'VSig RG', sensor: '0-150 V AC' },
+            dgC: { kind: 'C', description: 'Green Aspect Current', parameter: 'ISig DG', sensor: '0-1 A AC' },
+            hgC: { kind: 'C', description: 'Yellow Aspect Current', parameter: 'ISig HG', sensor: '0-1 A AC' },
+            hhgC: { kind: 'C', description: 'Double Yellow Aspect Current', parameter: 'ISig HHG', sensor: '0-1 A AC' },
+            rgC: { kind: 'C', description: 'Red Aspect Current', parameter: 'ISig RG', sensor: '0-1 A AC' }
+        };
+        function svySignal(cfg) {
+            var S = SVY_SIG;
+            if (cfg === '2-ASP') return [S.hpr, S.rgV, S.hgV, S.rgC, S.hgC];
+            if (cfg === '3-ASP') return [S.hpr, S.dpr, S.rgV, S.dgV, S.hgV, S.rgC, S.dgC, S.hgC];
+            if (cfg === '4-ASP') return [S.hpr, S.dpr, S.hhpr, S.rgV, S.hgV, S.dgV, S.hhgV, S.rgC, S.hgC, S.dgC, S.hhgC];
+            return [];
+        }
+        var SVY_COON = [
+            { kind: 'V', description: 'CO-HPR Voltage', parameter: 'VCo Sig HPR', sensor: '0-50 V DC' },
+            { kind: 'V', description: 'Calling ON Aspect Voltage', parameter: 'VCo Sig', sensor: '0-150 V AC' },
+            { kind: 'C', description: 'Calling ON Aspect Current', parameter: 'ICo Sig', sensor: '0-1 A AC' }
+        ];
+        function svyRoute(cfg) {
+            var n = cfg === '1 Route' ? 1 : cfg === '2 Route' ? 2 : cfg === '3 Route' ? 3 : 0;
+            var secs = ['AUG', 'BUG', 'CUG'], out = [];
+            for (var i = 0; i < n; i++) {
+                out.push({ kind: 'V', description: 'Route HPR Voltage - ' + secs[i], parameter: 'VRo Sig HPR', sensor: '0-50 V DC' });
+                out.push({ kind: 'V', description: 'Route Aspect Voltage - ' + secs[i], parameter: 'VRo Sig', sensor: '0-150 V AC' });
+                out.push({ kind: 'C', description: 'Route Aspect Current - ' + secs[i], parameter: 'IRo Sig', sensor: '0-1 A AC' });
+            }
+            return out;
+        }
+        var SVY_SH3 = [
+            { kind: 'V', description: 'Shunt HPR Voltage', parameter: 'VShSig HPR', sensor: '0-50 V DC' },
+            { kind: 'V', description: 'Shunt ON Aspect Voltage', parameter: 'VShSig ON', sensor: '0-150 V AC' },
+            { kind: 'V', description: 'Shunt OFF Aspect Voltage', parameter: 'VShSig OFF', sensor: '0-150 V AC' },
+            { kind: 'V', description: 'Shunt PILOT Aspect Voltage', parameter: 'VShSig PILOT', sensor: '0-150 V AC' },
+            { kind: 'C', description: 'Shunt ON Aspect Current', parameter: 'IShSig ON', sensor: '0-1 A AC' },
+            { kind: 'C', description: 'Shunt OFF Aspect Current', parameter: 'IShSig OFF', sensor: '0-1 A AC' },
+            { kind: 'C', description: 'Shunt PILOT Aspect Current', parameter: 'IShSig PILOT', sensor: '0-1 A AC' }
+        ];
+        function svyPM(end, kind, desc, param, sensor) { return { kind: kind, description: desc, parameter: end + ' ' + param, sensor: sensor }; }
+        function svyPoint(cfg, sub) {
+            // Series uses one end's set; Parallel has A + B. Full = both ends / normal+reverse.
+            function endSet(end) {
+                return {
+                    nV: svyPM(end, 'V', '110 DC at Loc box for Normal', 'NW V', '0-150 V DC'),
+                    rV: svyPM(end, 'V', '110 DC at Loc box for Reverse', 'RW V', '0-150 V DC'),
+                    nC: svyPM(end, 'C', 'Point Machine Current Normal', 'NW C', '0-10 A DC'),
+                    rC: svyPM(end, 'C', 'Point Machine Current Reverse', 'RW C', '0-10 A DC'),
+                    nK: svyPM(end, 'V', '24 V DC to Relay Room after detection (Normal)', 'NWKR LOC', '0-50 V DC'),
+                    rK: svyPM(end, 'V', '24 V DC to Relay Room after detection (Reverse)', 'RWKR LOC', '0-50 V DC')
+                };
+            }
+            if (cfg === 'Series') {
+                var a = endSet('A-End');
+                if (sub === 'Normal End with Indication') return [a.nV, a.nC, a.nK];
+                if (sub === 'Reverse End with Indication') return [a.rV, a.rC, a.rK];
+                return [a.nV, a.rV, a.nC, a.rC, a.nK, a.rK];   // Full
+            }
+            if (cfg === 'Parallel') {
+                var pa = endSet('A-End'), pb = endSet('B-End');
+                var full = [pa.nV, pa.rV, pa.nC, pa.rC, pa.nK, pa.rK, pb.nV, pb.rV, pb.nC, pb.rC, pb.nK, pb.rK];
+                if (sub === 'A End') return [pa.nV, pa.rV, pa.nC, pa.rC, pa.nK, pa.rK];
+                if (sub === 'B End') return [pb.nV, pb.rV, pb.nC, pb.rC, pb.nK, pb.rK];
+                return full;
+            }
+            return [];
+        }
+        function svyGearParams(g) {
+            var defs;
+            switch (g.type) {
+                case 'TF': defs = SVY_TF; break;
+                case 'TR': defs = SVY_TR; break;
+                case 'Signal': defs = svySignal(g.cfg); break;
+                case 'CO-ON': defs = SVY_COON; break;
+                case 'Route': defs = svyRoute(g.cfg); break;
+                case 'Shunt': defs = g.cfg === '3-ASP' ? SVY_SH3 : []; break;   // 1-ASP params not supplied
+                case 'Point': defs = svyPoint(g.cfg, g.sub); break;
+                default: defs = [];   // AC / BusBar / UFSBI / BHMS: recorded only, no yard rows
+            }
+            return (defs || []).map(function (x) { return $.extend({}, x, { gearType: g.type, asset: g.name }); });
+        }
+        function svyPins() { var a = []; for (var i = 1; i <= 10; i++) a.push({ pin: i, used: false }); return a; }
+        function svyAllocate(params) {
+            var voltage = params.filter(function (p) { return p.kind === 'V'; });
+            var current = params.filter(function (p) { return p.kind === 'C'; });
+            var cr = svCards(voltage.length, current.length), ai = cr.ai, ci = cr.ci, cards = [];
+            for (var i = 1; i <= ai; i++) cards.push({ order: i, card: 'MintCard-' + i, adc: 'ADC ' + i, cardType: 'AI', pins: svyPins() });
+            for (var j = 1; j <= ci; j++) cards.push({ order: ai + j, card: 'C-' + j, adc: 'ADC ' + (ai + j), cardType: 'CI', pins: svyPins() });
+            var ais = cards.filter(function (c) { return c.cardType === 'AI'; });
+            var cis = cards.filter(function (c) { return c.cardType === 'CI'; });
+            function assign(card, pin, param, buckel) { var s = card.pins[pin - 1]; s.used = true; s.param = param; s.buckel = buckel ? 'Yes' : 'No'; }
+            var vi = 0;
+            ais.forEach(function (card) { for (var pin = 1; pin <= 8 && vi < voltage.length; pin++) assign(card, pin, voltage[vi++], false); });
+            var curr = current.slice();
+            if (ci > 0) cis.forEach(function (card) { for (var pin = 1; pin <= 10 && curr.length; pin++) assign(card, pin, curr.shift(), false); });
+            ais.forEach(function (card) { for (var pin = 1; pin <= 8 && curr.length; pin++) { if (!card.pins[pin - 1].used) assign(card, pin, curr.shift(), true); } });
+            ais.forEach(function (card) { for (var pin = 9; pin <= 10 && curr.length; pin++) { if (!card.pins[pin - 1].used) assign(card, pin, curr.shift(), false); } });
+            while (curr.length) {   // defensive: should not happen given svCards sizing
+                var card = { order: cards.length + 1, card: 'C-' + (cis.length + 1), adc: 'ADC ' + (cards.length + 1), cardType: 'CI', pins: svyPins() };
+                for (var p = 1; p <= 10 && curr.length; p++) assign(card, p, curr.shift(), false);
+                cards.push(card); cis.push(card);
+            }
+            var rows = [];
+            cards.sort(function (a, b) { return a.order - b.order; }).forEach(function (card) {
+                card.pins.forEach(function (slot) {
+                    if (slot.used) rows.push($.extend({}, slot.param, { card: card.card, adc: card.adc, pin: slot.pin, buckel: slot.buckel, spare: false }));
+                    else rows.push({ spare: true, card: card.card, adc: card.adc, pin: slot.pin, buckel: 'No', kind: '-', parameter: 'SPARE', sensor: '-', asset: 'SPARE', gearType: '-' });
+                });
+            });
+            return { rows: rows, ai: ai, ci: ci };
+        }
+        function svRenderYardPreview() {
+            var l = svLoc(SVSEL);
+            if (!l) { $('#svYard').html(''); return; }
+            var params = [];
+            l.gears.forEach(function (g) { params = params.concat(svyGearParams(g)); });
+            if (!params.length) { $('#svYard').html('<div class="sv-empty">No wireable gears in this location yet — add TF/TR/Signal/Route/Shunt(3-ASP)/Point/CO-ON to see the yard layout.</div>'); return; }
+            var a = svyAllocate(params), used = a.rows.filter(function (r) { return !r.spare; }).length;
+            var body = a.rows.map(function (r) {
+                return '<tr' + (r.spare ? ' class="sp"' : '') + '><td>' + r.card + '</td><td>' + r.adc + '</td><td class="n">' + r.pin + '</td>'
+                    + '<td class="n">' + (r.kind || '-') + '</td>'
+                    + '<td>' + (r.spare ? '<span class="sv-muted">—</span>' : locEsc(r.asset) + ' <span class="sv-muted">(' + r.gearType + ')</span>') + '</td>'
+                    + '<td>' + (r.spare ? '<span class="sv-muted">SPARE</span>' : locEsc(r.parameter)) + '</td>'
+                    + '<td>' + locEsc(r.sensor || '-') + '</td>'
+                    + '<td class="n">' + (r.buckel === 'Yes' ? '<b style="color:var(--co-hv)">Yes</b>' : '<span class="sv-muted">' + r.buckel + '</span>') + '</td></tr>';
+            }).join('');
+            $('#svYard').html('<div class="sv-yh"><div>MintCard (AI)<b>' + a.ai + '</b></div><div>CI card<b>' + a.ci + '</b></div><div>ADC<b>' + (a.ai + a.ci) + '</b></div>'
+                + '<div>Pins used<b>' + used + '</b></div><div>Total pins<b>' + a.rows.length + '</b></div></div>'
+                + '<div style="overflow-x:auto"><table class="sv-t"><thead><tr><th>Card</th><th>ADC</th><th class="n">Pin</th><th class="n">V/C</th><th>Gear</th><th>Parameter</th><th>Sensor</th><th class="n">Buckel</th></tr></thead><tbody>' + body + '</tbody></table></div>');
+        }
+
+        // ── restyle: station-level totals, figures strip and line diagram ──
+        function svTotals() {
+            var T = { locs: SV.locs.length, gears: 0, v: 0, c: 0, ai: 0, ci: 0, buckel: 0, total: 0, rfs: {}, s: [0, 0, 0, 0, 0, 0, 0, 0] };
+            SV.locs.forEach(function (l) {
+                var rf = parseInt(l.rf, 10) || 0; if (rf) T.rfs[rf] = 1;
+                T.gears += l.gears.length;
+                var c = svCalc(l.gears);
+                T.v += c.v; T.c += c.c; T.ai += c.cards.ai; T.ci += c.cards.ci; T.buckel += c.cards.buckel; T.total += c.cards.total;
+                c.sensors.forEach(function (n, i) { T.s[i] += n; });
+            });
+            T.rfCount = Object.keys(T.rfs).length;
+            return T;
+        }
+
+        function svRenderFigs() {
+            if (!SV.locs.length) { $('#svFigs').html('<div class="sv-fig"><b>0</b><span>Locations</span><small>Add the first one</small></div>'); return; }
+            var T = svTotals();
+            var figs = [
+                ['Locations', T.locs, T.gears + ' gears', 0],
+                ['RF clusters', T.rfCount, 'IoT groups', 0],
+                ['Total inputs', T.v + T.c, T.v + ' V · ' + T.c + ' C', 1],
+                ['AI cards', T.ai, T.buckel + ' buckel', 0],
+                ['CI cards', T.ci, '', 0],
+                ['Total cards', T.total, T.ai + ' AI + ' + T.ci + ' CI', 1]
+            ];
+            $('#svFigs').html(figs.map(function (f) {
+                return '<div class="sv-fig' + (f[3] ? ' hl' : '') + '"><b>' + f[1] + '</b><span>' + f[0] + '</span>'
+                    + (f[2] ? '<small>' + f[2] + '</small>' : '') + '</div>';
+            }).join(''));
+        }
+
+        function svRenderDiagram() {
+            if (SV.locs.length < 1) { $('#svDiagram').hide().html(''); return; }
+            var locs = SV.locs.slice().sort(function (a, b) { return (a.rf - b.rf) || svNatural(a.name, b.name); });
+            var gap = 110, pad = 52, y = 72, H = 150;
+            var W = pad * 2 + Math.max(0, locs.length - 1) * gap;
+            var x = function (i) { return pad + i * gap; };
+            var bands = [], cur = null;
+            locs.forEach(function (l, i) {
+                var rf = parseInt(l.rf, 10) || 0;
+                if (!cur || cur.rf !== rf) { cur = { rf: rf, a: i, b: i }; bands.push(cur); } else cur.b = i;
+            });
+            var s = '';
+            bands.forEach(function (bd) {
+                var a = x(bd.a) - 38, b = x(bd.b) + 38;
+                s += '<rect x="' + a + '" y="' + (y - 34) + '" width="' + (b - a) + '" height="68" rx="14" fill="var(--co-lt)" stroke="var(--bd)"/>'
+                   + '<text x="' + (a + 11) + '" y="' + (y - 18) + '" font-size="11" font-weight="700" fill="var(--co-hv)">' + (bd.rf ? 'RF ' + bd.rf : 'No RF') + '</text>';
+            });
+            s += '<line x1="' + (pad - 28) + '" x2="' + (W - pad + 28) + '" y1="' + y + '" y2="' + y + '" stroke="var(--co)" stroke-width="3"/>';
+            locs.forEach(function (l, i) {
+                var c = svCalc(l.gears), t = c.v + c.c, has = l.gears.length > 0;
+                s += '<g><title>' + locEsc(l.name) + ': ' + c.v + ' V, ' + c.c + ' C</title>'
+                   + '<circle cx="' + x(i) + '" cy="' + y + '" r="9" fill="#fff" stroke="' + (has ? 'var(--co)' : 'var(--bd)') + '" stroke-width="3"/>'
+                   + '<text x="' + x(i) + '" y="' + (y + 30) + '" text-anchor="middle" font-size="11" font-weight="700" fill="var(--tx)">' + locEsc((l.name || '').slice(0, 13)) + '</text>'
+                   + '<text x="' + x(i) + '" y="' + (y + 45) + '" text-anchor="middle" font-size="10" fill="var(--txm)">' + t + ' inputs</text></g>';
+            });
+            $('#svDiagram').show().html(
+                '<div class="sv-diag-in"><svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Locations grouped by RF cluster">' + s + '</svg></div>'
+                + '<div class="sv-diag-lg"><span><i class="d on"></i>Has gears</span><span><i class="d"></i>Empty</span><span>Bands group locations by RF cluster · ordered by RF then name</span></div>');
+        }
+
+        function svRender() {
+            if (!SV.loaded) return;
+            svRenderLocs(); svRenderDetail(); svRenderSummary(); svRenderFigs(); svRenderDiagram();
+            var gears = SV.locs.reduce(function (n, l) { return n + l.gears.length; }, 0);
+            var errs = svIssues().filter(function (w) { return w[0] === 'e'; }).length;
+            $('#tabSurveyCount').text(SV.locs.length);
+            $('#svStamp').toggleClass('dirty', SV.dirty).text(SV.locs.length + ' locations · ' + gears + ' gears' + (errs ? ' · ' + errs + ' to fix' : '') + (SV.dirty ? ' · unsaved changes' : ''));
+        }
+
+        // ── Save: locations → one SiteSurvey row each ──
+        function svToRequest() {
+            var pms = [];
+            var rows = SV.locs.map(function (l) {
+                var row = { Id: l.id || 0, SiteId: SV.siteId, LocationBoxNo: l.name, Cluster: parseInt(l.rf, 10) || 0, LocationSide: l.side, DistanceFromRR: l.dist, LocToLocDist: l.l2l,
+                            TF: [], TR: [], Signal: [], PointMachine: [], AxleCounter: [], BusBar: [], UFSBI: [], BHMS: [] };
+                l.gears.forEach(function (g) {
+                    var col = SV_TYPES[g.type].col;
+                    if (col === 'Signal') (g.asp || []).forEach(function (a) { row.Signal.push(g.name + ' ' + a); });
+                    else row[col].push(g.name);
+                    if (g.type === 'Point') {
+                        var old = SV.pms[g.name] || {}, half = g.sub !== 'Full Point Machine';
+                        pms.push({
+                            Name: g.name, SiteId: SV.siteId, IsSeriesOpration: g.cfg === 'Series', IsHalfPointMachine: half,
+                            // one-end point: 1 = A / Normal end, 2 = B / Reverse end; full point keeps what was stored
+                            SeriesOprationTypeId: half ? (/^(B End|Reverse)/.test(g.sub) ? 2 : 1) : (old.seriesOprationTypeId || null),
+                            IsThickWave: !!old.isThickWave, ThickWaveTypeId: old.thickWaveTypeId || null,
+                            MachineA: old.machineA == null ? null : old.machineA, MachineB: old.machineB == null ? null : old.machineB
+                        });
+                    }
+                });
+                Object.keys(row).forEach(function (k) { if (Array.isArray(row[k])) row[k] = row[k].join(','); });
+                return row;
+            });
+            return { SiteId: SV.siteId, Rows: rows, PointMachines: pms };
+        }
+
+        function svSave() {
+            if (!SV.loaded) { E7.warn('Select a station first'); return; }
+            var errs = svIssues().filter(function (w) { return w[0] === 'e'; });
+            if (errs.length) { E7.warn(errs.length + ' item(s) to fix before saving: ' + errs[0][1]); document.getElementById('svChecks').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+            if (!SV.dirty) { E7.success('No changes to save'); return; }
+            var $b = $('#svSaveBtn').prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Saving…');
+            var siteId = SV.siteId;
+            $.ajax({
+                url: '@Url.Action("SaveSurvey", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify(svToRequest()),
+                success: function (res) {
+                    if (res && res.success) {
+                        var p = res.propagated;
+                        var extra = p ? ' · added ' + (p.locations || 0) + ' location(s), ' + (p.assets || 0) + ' asset(s)'
+                                        + (p.failed ? ' (' + p.failed + ' skipped)' : '') : '';
+                        E7.success('Survey saved' + extra);
+                        SV.dirty = false; svLoad(siteId, true);
+                        // generated Location/Asset records show when you open those tabs (they reload on open)
+                        try { if (typeof loadLocations === 'function' && typeof __locSiteId !== 'undefined' && __locSiteId) loadLocations(siteId); } catch (e) { }
+                    }
+                    else {
+                        E7.error((res && res.error) || 'Save failed');
+                        if (res && res.partial) { SV.dirty = false; svLoad(siteId, true); }
+                    }
+                },
+                error: function (xhr) { E7.ajaxError(xhr, 'Save failed'); },
+                complete: function () { $b.prop('disabled', false).html('<i class="bi bi-cloud-check me-1"></i>Save survey'); }
+            });
+        }
+
+        window.addEventListener('beforeunload', function (e) { if (SV.dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+        // ══ Survey reporting: CSV / Excel / PDF (client-side, from the live survey data) ════════════
+        function svExportGuard() {
+            if (!SV.loaded || !SV.locs.length) { E7.warn('Load a station with survey locations first'); return false; }
+            return true;
+        }
+        function svStationName() {
+            var t = ($('#ddStation option:selected').text() || '').trim();
+            return (t && t !== 'Select Station') ? t : 'Station';
+        }
+        function svFileName(ext) {
+            return svStationName().replace(/[^\w\- ]+/g, '').trim() + ' survey ' + new Date().toISOString().slice(0, 10) + '.' + ext;
+        }
+        function svDownload(blob, name) {
+            var url = URL.createObjectURL(blob), a = document.createElement('a');
+            a.href = url; a.download = name; document.body.appendChild(a); a.click();
+            setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+        }
+        // Flatten the survey into report-ready rows + per-location summary + station totals
+        function svExportData() {
+            var ordered = SV.locs.slice().sort(function (a, b) { return (a.rf - b.rf) || svNatural(a.name, b.name); });
+            var rows = [];
+            ordered.forEach(function (l) {
+                if (!l.gears.length) {
+                    rows.push([l.name, l.rf, l.side, l.dist, l.l2l, '', '', '', 'No gears', 0, 0]);
+                } else {
+                    l.gears.forEach(function (g) {
+                        var rule = SV_RULES[svRuleKey(g)];
+                        rows.push([l.name, l.rf, l.side, l.dist, l.l2l, g.name, SV_TYPES[g.type].label,
+                            svCfgText(g), rule ? rule[0] : 'Recorded only', rule ? rule[1] : 0, rule ? rule[2] : 0]);
+                    });
                 }
             });
+            var summary = ordered.map(function (l) {
+                var c = svCalc(l.gears);
+                return [l.name, l.rf, l.gears.length, c.v, c.c, c.cards.ai, c.cards.ci, c.cards.buckel, c.cards.total].concat(c.sensors);
+            });
+            return { ordered: ordered, rows: rows, summary: summary, totals: svTotals() };
+        }
+        var SV_ROW_HEAD = ['Location', 'RF Cluster', 'Side', 'Dist from RR (m)', 'Loc-to-loc (m)', 'Gear', 'Type', 'Configuration', 'Material rule', 'V', 'C'];
+        var SV_SUM_HEAD = ['Location', 'RF', 'Gears', 'V', 'C', 'AI', 'CI', 'Buckel', 'Cards'];
+
+        // ── CSV ──
+        function svCsvCell(v) { v = v == null ? '' : String(v); return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+        function svExportCsv() {
+            if (!svExportGuard()) return;
+            var d = svExportData(), lines = [SV_ROW_HEAD].concat(d.rows);
+            var csv = lines.map(function (r) { return r.map(svCsvCell).join(','); }).join('\r\n');
+            svDownload(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }), svFileName('csv'));
+            E7.success('CSV exported');
+        }
+
+        // ── Excel (SheetJS, lazy-loaded) ──
+        function svLoadXlsx(cb) {
+            if (window.XLSX) return cb();
+            var s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            s.onload = function () { cb(); };
+            s.onerror = function () { E7.error('Could not load the Excel library (offline?). Use CSV instead.'); };
+            document.head.appendChild(s);
+        }
+        function svExportExcel() {
+            if (!svExportGuard()) return;
+            svLoadXlsx(function () {
+                var d = svExportData(), X = window.XLSX, wb = X.utils.book_new(), T = d.totals;
+                X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([SV_ROW_HEAD].concat(d.rows)), 'Survey');
+                var sum = [SV_SUM_HEAD.concat(SV_SENSORS)].concat(d.summary);
+                sum.push(['Station total', '', T.gears, T.v, T.c, T.ai, T.ci, T.buckel, T.total].concat(T.s));
+                X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(sum), 'Summary');
+                X.writeFile(wb, svFileName('xlsx'));
+                E7.success('Excel exported');
+            });
+        }
+
+        // ── PDF (formatted print view → Save as PDF) ──
+        function svExportPdf() {
+            if (!svExportGuard()) return;
+            var d = svExportData(), T = d.totals, esc = locEsc;
+            var sumRows = d.summary.map(function (s) {
+                return '<tr><td class="l">' + esc(s[0]) + '</td><td>' + esc(s[1]) + '</td><td>' + s[2] + '</td><td>' + s[3] + '</td><td>' + s[4]
+                    + '</td><td>' + s[5] + '</td><td>' + s[6] + '</td><td>' + s[7] + '</td><td><b>' + s[8] + '</b></td></tr>';
+            }).join('');
+            var gearRows = d.rows.map(function (r) {
+                return '<tr><td class="l">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td><td class="l">' + esc(r[5]) + '</td><td class="l">' + esc(r[6])
+                    + '</td><td class="l">' + esc(r[7]) + '</td><td class="l">' + esc(r[8]) + '</td><td>' + r[9] + '</td><td>' + r[10] + '</td></tr>';
+            }).join('');
+            // NOTE: build the report with balanced body markup only. Literal structural tags
+            // (doctype/html/head/meta/body) make Razor end the script early and dump JS onto the page.
+            var css = 'body{font:12px/1.4 Arial,sans-serif;color:#1f2937;margin:24px}h1{font-size:19px;margin:0 0 2px;color:#17365d}'
+                + '.meta{color:#64748b;font-size:11px;margin-bottom:14px}h2{font-size:14px;margin:18px 0 6px;color:#17365d}'
+                + 'table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:6px}th,td{border:1px solid #d6dee8;padding:4px 6px;text-align:center}'
+                + 'th{background:#17365d;color:#fff}td.l,th.l{text-align:left}tfoot td{background:#eef4fb;font-weight:700}';
+            var html = '<style>' + css + '</style>'
+                + '<h1>' + esc(svStationName()) + ' — Survey report</h1>'
+                + '<div class="meta">Generated ' + new Date().toLocaleString() + ' · ' + T.locs + ' locations · ' + T.rfCount + ' RF clusters · ' + T.gears + ' gears</div>'
+                + '<h2>Location summary</h2><table><thead><tr><th class="l">Location</th><th>RF</th><th>Gears</th><th>V</th><th>C</th><th>AI</th><th>CI</th><th>Buckel</th><th>Cards</th></tr></thead>'
+                + '<tbody>' + sumRows + '</tbody><tfoot><tr><td class="l">Station total</td><td></td><td>' + T.gears + '</td><td>' + T.v + '</td><td>' + T.c + '</td><td>' + T.ai + '</td><td>' + T.ci + '</td><td>' + T.buckel + '</td><td>' + T.total + '</td></tr></tfoot></table>'
+                + '<h2>Gears</h2><table><thead><tr><th class="l">Location</th><th>RF</th><th class="l">Gear</th><th class="l">Type</th><th class="l">Config</th><th class="l">Material rule</th><th>V</th><th>C</th></tr></thead><tbody>' + gearRows + '</tbody></table>';
+            var w = window.open('', '_blank');
+            if (!w) { E7.warn('Allow pop-ups to export the PDF report'); return; }
+            w.document.write(html); w.document.title = svStationName() + ' survey'; w.document.close(); w.focus();
+            setTimeout(function () { try { w.print(); } catch (e) { } }, 350);
         }
 
         // JSON is camelCased by ASP.NET ("tr", "ufsbi", "pointMachine"…), so match keys case-insensitively
@@ -706,107 +1671,6 @@
             var lk = key.toLowerCase();
             for (var k in r) if (k.toLowerCase() === lk) return r[k] != null ? r[k] : '';
             return '';
-        }
-
-        function gearRowHtml(r) {
-            var id = r.id || 0;
-            var html = '<tr data-id="' + id + '">'
-                + '<td><input class="form-control form-control-sm g-cluster" type="number" min="1" max="50" value="' + (r.cluster || '') + '"></td>'
-                + '<td><input class="form-control form-control-sm g-box" list="gearLocList" value="' + locEsc(r.locationBoxNo) + '" onchange="gearBoxPicked(this)"></td>'
-                + '<td><input class="form-control form-control-sm g-side" value="' + locEsc(r.locationSide) + '"></td>'
-                + '<td><input class="form-control form-control-sm g-dist" value="' + locEsc(r.distanceFromRR) + '"></td>';
-            GEAR_COLS.forEach(function (c) {
-                html += '<td><input class="form-control form-control-sm g-' + c + '" value="' + locEsc(gearVal(r, c)) + '"></td>';
-            });
-            html += '<td style="white-space:nowrap">'
-                + '<button class="sv-btn" style="background:var(--ok);border:none;color:#fff;font-size:10px;padding:3px 8px;border-radius:3px" onclick="saveGearRow(this)">Save</button> '
-                + '<span class="cl-rm" title="Delete row" onclick="deleteGearRow(this)">×</span>'
-                + '</td></tr>';
-            return html;
-        }
-
-        function renderGear() {
-            // Location suggestions = this station's locations (Location tab)
-            $('#gearLocList').html(__locations.map(function (l) { return '<option value="' + locEsc((l.location || '').toUpperCase()) + '">'; }).join(''));
-            var rows = __gearRows.slice().sort(function (a, b) { return (a.cluster - b.cluster) || String(a.locationBoxNo).localeCompare(String(b.locationBoxNo), undefined, { numeric: true }); });
-            $('#gearBody').html(rows.length ? rows.map(gearRowHtml).join('')
-                : '<tr><td colspan="13" style="color:var(--txm)">No survey rows yet — click "Add Location Box"</td></tr>');
-            renderGearCoverage();
-        }
-
-        function addGearRow() {
-            if (!__locSiteId) { E7.warn('Select a station first'); return; }
-            if (!$('#gearBody tr[data-id]').length) $('#gearBody').empty();
-            $('#gearBody').append(gearRowHtml({}));
-        }
-
-        // Picking a known location fills its RF cluster number
-        function gearBoxPicked(inp) {
-            var v = inp.value.trim().toUpperCase();
-            var l = __locations.filter(function (x) { return (x.location || '').toUpperCase() === v; })[0];
-            if (l && l.rfCluster) $(inp).closest('tr').find('.g-cluster').val(l.rfCluster);
-        }
-
-        function saveGearRow(btn) {
-            var $r = $(btn).closest('tr');
-            var body = {
-                Id: parseInt($r.data('id'), 10) || 0, SiteId: __locSiteId,
-                Cluster: parseInt($r.find('.g-cluster').val(), 10) || 0,
-                LocationBoxNo: $r.find('.g-box').val(), LocationSide: $r.find('.g-side').val(),
-                DistanceFromRR: $r.find('.g-dist').val()
-            };
-            GEAR_COLS.forEach(function (c) { body[c] = $r.find('.g-' + c).val(); });
-            if (!body.LocationBoxNo.trim()) { E7.warn('Enter the location box'); return; }
-            if (!body.Cluster) { E7.warn('Enter the RF cluster number'); return; }
-            btn.disabled = true; btn.textContent = '…';
-            $.ajax({
-                url: '@Url.Action("SaveSurveyGear", "Station")', type: 'POST', contentType: 'application/json',
-                data: JSON.stringify(body),
-                success: function (res) {
-                    if (res && res.success) { E7.success('Survey row "' + body.LocationBoxNo.trim() + '" saved'); loadSurveyGear(__locSiteId); }
-                    else { E7.error((res && res.error) || 'Save failed'); btn.disabled = false; btn.textContent = 'Save'; }
-                },
-                error: function (xhr) { E7.ajaxError(xhr); btn.disabled = false; btn.textContent = 'Save'; }
-            });
-        }
-
-        function deleteGearRow(el) {
-            var $r = $(el).closest('tr');
-            var id = parseInt($r.data('id'), 10) || 0;
-            if (!id) { $r.remove(); return; }   // unsaved row
-            if (!confirm('Delete survey row "' + $r.find('.g-box').val() + '"? This removes it permanently (also on the 90 site).')) return;
-            $.post('@Url.Action("DeleteSurveyGear", "Station")', { id: id, siteId: __locSiteId }, function (res) {
-                if (res && res.success) { E7.success('Survey row deleted'); loadSurveyGear(__locSiteId); } else E7.error((res && res.error) || 'Delete failed');
-            }).fail(function (xhr) { E7.ajaxError(xhr, 'Delete failed'); });
-        }
-
-        // Point 5: which Track / Signal / Point Machine assets are not mapped to any location box yet
-        function renderGearCoverage() {
-            function names(col) {
-                var set = {};
-                __gearRows.forEach(function (r) {
-                    String(gearVal(r, col) || '').split(/[,;]+/).forEach(function (n) { n = n.trim().toUpperCase(); if (n) set[n] = true; });
-                });
-                return set;
-            }
-            var tr = names('TR'), tf = names('TF'), pm = names('PointMachine'), sg = names('Signal');
-            function missing(typeId, test) {
-                return __siteAssets.filter(function (a) { return a.assetTypeId === typeId && !test((a.name || '').trim().toUpperCase()); })
-                                   .map(function (a) { return a.name; });
-            }
-            var parts = [
-                ['Tracks without TR', missing(1, function (n) { return tr[n]; })],
-                ['Tracks without TF', missing(1, function (n) { return tf[n]; })],
-                ['Point machines', missing(3, function (n) { return pm[n]; })],
-                ['Signals', missing(2, function (n) { return sg[n]; })]
-            ];
-            if (!__siteAssetsLoaded) { $('#gearCoverage').html(''); return; }
-            var html = parts.map(function (p) {
-                return p[1].length
-                    ? '<div><b style="color:var(--warn)">' + p[0] + ' not mapped (' + p[1].length + '):</b> ' + p[1].map(locEsc).join(', ') + '</div>'
-                    : '<div style="color:var(--ok)">✓ ' + p[0].replace(' without', ' — all have') + ' mapped</div>';
-            }).join('');
-            $('#gearCoverage').html(html);
         }
 
         function locWiredCount(clusterId) {
@@ -826,6 +1690,7 @@
                  +   '<span class="cl-info">' + wired + ' wired</span>'
                  +   '<span class="cl-set" title="Photos of this location" onclick="event.stopPropagation();openPhotos(' + l.id + ')"><i class="bi bi-camera"></i> photos</span>'
                  +   '<span class="cl-set" onclick="editLocation(' + l.id + ')">edit</span>'
+                 +   '<span class="cl-set" style="color:var(--err)" title="Remove this location (soft delete)" onclick="event.stopPropagation();deleteLocation(' + l.id + ')"><i class="bi bi-trash"></i> remove</span>'
                  + '</div></div>';
         }
 
@@ -901,6 +1766,28 @@
                 PowerSupplyId: parseInt($('#locNewPower').val(), 10) || null,
                 RfCluster: parseInt($('#locNewRf').val(), 10)
             }, function () { $('#locNewName').val(''); });
+        }
+
+        // Soft-delete a location (Cluster): marks it deleted via the API, keeps the row, cascades to its ADCs/cards.
+        function deleteLocation(id) {
+            var l = (__locations || []).filter(function (x) { return x.id === id; })[0]
+                 || (typeof __ycClusters !== 'undefined' ? __ycClusters.filter(function (x) { return x.id === id; })[0] : null);
+            var name = l ? (l.location || l.name || ('location ' + id)) : ('location ' + id);
+            if (!confirm('Remove "' + name + '"?\n\nThis soft-deletes the location (marked deleted, not erased) along with its ADCs and cards. '
+                       + 'It disappears from the lists but the row is kept and can be restored.')) return;
+            var siteId = parseInt((typeof __currentSiteId !== 'undefined' && __currentSiteId) || __locSiteId || 0, 10) || 0;
+            $.ajax({
+                url: '@Url.Action("DeleteLocation", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ Id: id, SiteId: siteId }),
+                success: function (res) {
+                    if (res && res.success) {
+                        E7.success('Location "' + name + '" removed');
+                        if (typeof __locSiteId !== 'undefined' && __locSiteId) loadLocations(__locSiteId);
+                        if (typeof __ycSite !== 'undefined' && __ycSite) { __ycSite = 0; ycOnOpen(); }   // refresh Yard Config if loaded
+                    } else E7.error((res && res.error) || 'Could not remove location');
+                },
+                error: function (xhr) { E7.ajaxError(xhr, 'Could not remove location'); }
+            });
         }
 
         function editLocation(id) {
@@ -1054,6 +1941,7 @@
                 var panel = document.getElementById('tab-' + tab.dataset.tab);
                 if (panel) panel.classList.add('on');
                 if (tab.dataset.tab === 'yard') ycOnOpen();
+                if (tab.dataset.tab === 'material') mpOnOpen();
             });
         });
 
@@ -1279,6 +2167,7 @@
                      +     '<span class="t">Lines <b>' + usedLines + ' / ' + totLines + '</b></span>'
                      +   '</div></div>'
                      +   '<button class="bg7" onclick="editLocation(' + cl.id + ')" title="Edit this location"><i class="bi bi-pencil"></i> Edit</button>'
+                     +   '<button class="bg7" style="color:var(--err)" onclick="deleteLocation(' + cl.id + ')" title="Remove this location (soft delete)"><i class="bi bi-trash"></i> Remove</button>'
                      + '</div>';
 
             var adcRow = '<div class="yc-adc"><span class="yc-adc-lbl">ADCs</span>'
@@ -1326,8 +2215,58 @@
                         +   '<button class="be7 yc-ac-add" onclick="ycAddCard(this)"><i class="bi bi-plus-lg"></i> Add card</button>'
                         + '</div>';
 
-            $('#ycDetail').html(head + adcRow + '<div class="yc-cards">' + cardHtml + addTile + '</div>');
+            $('#ycDetail').html(head + adcRow + ycYardPreview(cl) + '<div class="yc-cards">' + cardHtml + addTile + '</div>');
             __ycAddType = 'C';
+        }
+
+        // Suggested MintCard/CI/ADC/Pin layout for this cluster, computed from the matching survey
+        // location's gears (same algorithm as the Survey tab preview). Read-only — nothing is wired.
+        function ycYardPreview(cl) {
+            if (typeof SV === 'undefined' || !SV.locs || !SV.locs.length) return '';
+            var name = String(cl.location || '').trim().toUpperCase();
+            var loc = SV.locs.filter(function (l) { return String(l.name || '').trim().toUpperCase() === name; })[0];
+            if (!loc || !loc.gears || !loc.gears.length) return '';
+            var params = [];
+            loc.gears.forEach(function (g) { params = params.concat(svyGearParams(g)); });
+            if (!params.length) return '';
+            var a = svyAllocate(params), used = a.rows.filter(function (r) { return !r.spare; }).length;
+            var body = a.rows.map(function (r) {
+                return '<tr' + (r.spare ? ' class="sp"' : '') + '><td>' + r.card + '</td><td>' + r.adc + '</td><td class="n">' + r.pin + '</td>'
+                    + '<td class="n">' + (r.kind || '-') + '</td>'
+                    + '<td>' + (r.spare ? '<span class="sv-muted">—</span>' : locEsc(r.asset) + ' <span class="sv-muted">(' + r.gearType + ')</span>') + '</td>'
+                    + '<td>' + (r.spare ? '<span class="sv-muted">SPARE</span>' : locEsc(r.parameter)) + '</td>'
+                    + '<td class="n">' + (r.buckel === 'Yes' ? '<b style="color:var(--co-hv)">Yes</b>' : '<span class="sv-muted">' + r.buckel + '</span>') + '</td></tr>';
+            }).join('');
+            return '<div class="yc-prev"><div class="yc-prev-h"><i class="bi bi-magic"></i> Suggested configuration from survey'
+                + '<span class="yc-prev-sub">gear-input view · Generate wires each asset\'s own attributes (current on MintCard 9-10 / CI, no buckel)</span>'
+                + '<span class="yc-prev-chips"><span>MintCard ' + a.ai + '</span><span>CI ' + a.ci + '</span><span>ADC ' + (a.ai + a.ci) + '</span><span>' + used + ' pins</span></span>'
+                + '<button class="be7" id="ycGenBtn" style="margin-left:8px" onclick="ycGenerate(' + cl.id + ')"><i class="bi bi-magic me-1"></i>Generate from survey</button></div>'
+                + '<div class="yc-prev-body"><table class="sv-t"><thead><tr><th>Card</th><th>ADC</th><th class="n">Pin</th><th class="n">V/C</th><th>Gear</th><th>Parameter</th><th class="n">Buckel</th></tr></thead><tbody>' + body + '</tbody></table></div></div>';
+        }
+
+        // Persist: create cards/ADCs/CardLines for this cluster from the survey (empty cluster only).
+        function ycGenerate(clusterId) {
+            if (!clusterId) return;
+            if (!confirm('Generate cards, ADCs and card-line wiring for this cluster from the survey?\n\nThis writes to the database. It runs only on an EMPTY cluster, and wires each asset\'s own attributes (current on MintCard 9-10 / CI cards — no buckel, per the card pin rules).')) return;
+            var $b = $('#ycGenBtn').prop('disabled', true).html('<i class="bi bi-hourglass-split me-1"></i>Generating…');
+            $.ajax({
+                url: '@Url.Action("GenerateYardForCluster", "Station")', type: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ SiteId: parseInt(__currentSiteId, 10) || 0, ClusterId: clusterId }),
+                success: function (res) {
+                    if (res && res.success) {
+                        E7.success('Generated ' + res.cards + ' card(s), ' + res.adcs + ' ADC(s), wired ' + res.wired + ' line(s)'
+                            + (res.failed ? ' · ' + res.failed + ' failed' : '') + (res.leftover ? ' · ' + res.leftover + ' not placed' : ''));
+                        if (res.missingAssets && res.missingAssets.length)
+                            E7.warn('No asset yet for: ' + res.missingAssets.join(', ') + ' — save the survey to create them.');
+                        delete __ycCache[clusterId];
+                        ycSelectCluster(clusterId);
+                    } else {
+                        E7.error((res && res.error) || 'Generation failed');
+                        $b.prop('disabled', false).html('<i class="bi bi-magic me-1"></i>Generate from survey');
+                    }
+                },
+                error: function (xhr) { E7.ajaxError(xhr, 'Generation failed'); $b.prop('disabled', false).html('<i class="bi bi-magic me-1"></i>Generate from survey'); }
+            });
         }
 
         var __ycAddType = 'C';
@@ -1907,6 +2846,256 @@
         var fb = document.getElementById('fsBtn'), sc = document.getElementById('survCont');
         if (fb && sc) fb.addEventListener('click', function() { sc.classList.toggle('fst'); });
 
+        // ══ MATERIAL POSITIONING TAB ══════════════════════════════════════════════════
+        // Survey gear → AttributeSensorMapping → cards / A10 / ADC per location (StationController.GetMaterialPositioning)
+        var __mp = null, __mpSiteId = 0, __mpSel = -1, __mpBusy = false;
+
+        function mpSite() { return parseInt($('#ddStation').val(), 10) || 0; }
+        function mpSpare() { var v = parseFloat($('#mpSpare').val()); return isNaN(v) || v < 0 ? 0 : Math.min(v, 100); }
+        function mpOnOpen() { if (mpSite() !== __mpSiteId || !__mp) mpLoad(); }
+        $('#ddStation').on('change', function () {
+            __mp = null; __mpSiteId = 0; __mpSel = -1;
+            if ($('#tab-material').hasClass('on')) mpLoad(); else $('#mpBody').html('<div class="mp-empty">Open this tab to calculate</div>');
+        });
+
+        function mpLoad() {
+            var siteId = mpSite();
+            if (!siteId) { __mp = null; $('#mpStamp').hide(); $('#mpBody').html('<div class="mp-empty">Select a station</div>'); return; }
+            if (__mpBusy) return;
+            __mpBusy = true;
+            $('#mpBody').html('<div class="mp-empty"><span class="spinner-border spinner-border-sm me-2"></span>Calculating…</div>');
+            $.ajax({
+                url: '@Url.Action("GetMaterialPositioning", "Station")',
+                data: { siteId: siteId, spare: mpSpare() },
+                success: function (res) {
+                    if (siteId !== mpSite()) return;
+                    if (!res || res.error) { $('#mpBody').html('<div class="mp-empty" style="color:var(--err)">' + locEsc((res && res.error) || 'Failed to calculate') + '</div>'); return; }
+                    __mp = res; __mpSiteId = siteId; __mpSel = -1;
+                    mpRender();
+                },
+                error: function () { $('#mpBody').html('<div class="mp-empty" style="color:var(--err)">Failed to calculate</div>'); },
+                complete: function () { __mpBusy = false; }
+            });
+        }
+
+        function mpSensorKeys() {
+            var keys = {};
+            (__mp.locations || []).forEach(function (l) { Object.keys(l.plan.sensors || {}).forEach(function (k) { keys[k] = true; }); });
+            // Same order as the server (MaterialPositioning.SensorOrder): voltage first; DC, AC, HZ; then by range
+            function ord(k) {
+                var p = k.split('|'), t = (p[1] || '').toUpperCase();
+                var nums = (t.match(/\d+(\.\d+)?/g) || []).map(Number);
+                return [p[0] === 'Voltage' ? 0 : 1, /DC$/.test(t) ? 0 : /AC$/.test(t) ? 1 : /HZ$/.test(t) ? 2 : 3, nums.length ? Math.max.apply(null, nums) : 0];
+            }
+            return Object.keys(keys).sort(function (a, b) {
+                var x = ord(a), y = ord(b);
+                return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.localeCompare(b);
+            });
+        }
+        function mpShort(k) { var p = k.split('|'); return (p[0] === 'Voltage' ? 'V ' : 'C ') + p[1]; }
+        function mpSum(f) { return (__mp.locations || []).reduce(function (s, l) { return s + (f(l) || 0); }, 0); }
+
+        function mpRender() {
+            var locs = __mp.locations || [];
+            var d = new Date(__mp.generatedAt);
+            $('#mpStamp').text('Calculated ' + d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })).show();
+            if (!locs.length) {
+                $('#mpBody').html('<div class="mp-empty">No survey gear rows for this station yet. Add them in the Location tab → Survey gear.</div>');
+                return;
+            }
+            var keys = mpSensorKeys();
+            var gaps = locs.filter(function (l) { return (l.gaps || []).length; }).length;
+            var warns = (__mp.warnings || []).length + mpSum(function (l) { return (l.plan.warnings || []).length; });
+            var h = '<div class="mp-kpi">'
+                + '<div class="k"><div class="l">Locations</div><div class="v">' + locs.length + '</div></div>'
+                + '<div class="k"><div class="l">Voltage / current points</div><div class="v">' + mpSum(function (l) { return l.plan.voltage; }) + ' / ' + mpSum(function (l) { return l.plan.current; }) + '</div></div>'
+                + '<div class="k"><div class="l">Voltage cards (MintCard)</div><div class="v">' + mpSum(function (l) { return l.plan.voltageCards; }) + '</div></div>'
+                + '<div class="k"><div class="l">Current cards</div><div class="v">' + mpSum(function (l) { return l.plan.currentCards; }) + '</div></div>'
+                + '<div class="k"><div class="l">A10 = ADC</div><div class="v">' + mpSum(function (l) { return l.plan.a10; }) + '</div></div>'
+                + '<div class="k"><div class="l">Survey vs yard gaps</div><div class="v" style="color:' + (gaps ? 'var(--warn)' : 'var(--ok)') + '">' + gaps + '</div></div>'
+                + '</div>';
+            if (warns) h += '<div class="mp-warn" style="margin:-4px 0 8px"><i class="bi bi-exclamation-triangle me-1"></i>' + warns + ' remark(s) — open a location to see them.</div>';
+
+            h += '<div class="mp-views">'
+               + mpChip('loc', 'Location-wise') + mpChip('asset', 'Asset-wise (' + (__mp.assets || []).length + ')')
+               + mpChip('sensor', 'Sensor matrix') + mpChip('bom', 'Bill of material') + '</div>';
+            if (__mpView === 'loc') h += mpLocHtml();
+            else if (__mpView === 'asset') h += mpAssetHtml();
+            else if (__mpView === 'bom') h += mpBomHtml();
+            else h += mpSensorHtml(keys);
+            $('#mpBody').html(h);
+            if (__mpSel >= 0 && __mpView !== 'asset' && __mpView !== 'bom') mpSelect(__mpSel);
+        }
+
+        var __mpView = 'loc';
+        function mpChip(v, label) { return '<button class="mp-chip' + (__mpView === v ? ' on' : '') + '" onclick="__mpView=\'' + v + '\';mpRender()">' + label + '</button>'; }
+        function mpLabel(l) { return l.hasSurvey ? 'cluster_' + l.plan.rfCluster + '/' + l.plan.location : l.clusterName; }
+        function mpInputs(list) { return list.length ? '<div class="mp-list">' + list.map(locEsc).join(', ') + '</div>' : '<span style="color:var(--txl)">—</span>'; }
+        function mpPW(plan, wired, hasWired) {
+            if (!hasWired) return String(plan);
+            if (plan === wired) return String(plan);
+            return plan + ' <span class="mp-gap" title="Planned ' + plan + ', wired ' + wired + '">wired ' + wired + '</span>';
+        }
+
+        // e7mriv2web Material Positioning layout: Cluster | Data points | No_V | No_C | No_DI | VI | C | Type card | FTU type
+        function mpLocHtml() {
+            var locs = __mp.locations || [];
+            var h = '<div style="overflow-x:auto;border:1px solid var(--bd);border-radius:7px"><table class="st mp-t"><thead><tr>'
+                + '<th class="l">Cluster</th><th class="gh">Data points</th><th class="gh">No_V</th><th class="gh">No_C</th><th class="gh">No_DI</th>'
+                + '<th class="l" style="min-width:260px">Voltage inputs (VI)</th><th class="l" style="min-width:200px">Current inputs (C)</th>'
+                + '<th>Type card</th><th>FTU type</th><th>A10 / ADC</th></tr></thead><tbody>';
+            locs.forEach(function (l, i) {
+                var p = l.plan, hw = !!l.clusterId && (l.wiredPoints || []).length > 0;
+                var src = l.hasSurvey
+                    ? (p.points || []).map(function (x) { return { s: x.asset + '(' + x.title + ')', k: x.kind }; })
+                    : (l.wiredPoints || []).map(function (x) { return { s: x.asset + '(' + x.title + ')', k: x.kind }; });
+                var vi = src.filter(function (x) { return x.k === 'Voltage'; }).map(function (x) { return x.s; });
+                var ci = src.filter(function (x) { return x.k === 'Current'; }).map(function (x) { return x.s; });
+                var dpPlan = l.hasSurvey ? p.voltage + p.current : (l.wiredPoints || []).length;
+                h += '<tr class="mp-row' + (i === __mpSel ? ' sel' : '') + '" onclick="mpSelect(' + i + ')">'
+                   + '<td class="l"><b>' + locEsc(mpLabel(l)) + '</b>'
+                   + (l.hasSurvey ? '' : '<div style="font-size:9px;color:var(--txl)">wired only · no survey row</div>')
+                   + ((p.warnings || []).length ? ' <i class="bi bi-exclamation-triangle" style="color:var(--warn)" title="' + locEsc(p.warnings.join('\n')) + '"></i>' : '') + '</td>'
+                   + '<td>' + (l.hasSurvey ? mpPW(dpPlan, (l.wiredPoints || []).length, hw) : dpPlan) + '</td>'
+                   + '<td>' + (l.hasSurvey ? mpPW(p.voltage, l.wiredVoltageAll, hw) : l.wiredVoltageAll) + '</td>'
+                   + '<td>' + (l.hasSurvey ? mpPW(p.current, l.wiredCurrentAll, hw) : l.wiredCurrentAll) + '</td>'
+                   + '<td>' + (l.wiredDI || 0) + '</td>'
+                   + '<td class="l">' + mpInputs(vi) + '</td><td class="l">' + mpInputs(ci) + '</td>'
+                   + '<td>' + locEsc(l.hasSurvey ? (p.typeCard || '—') : (l.wiredTypeCard || '—'))
+                   + (l.hasSurvey && hw && l.wiredTypeCard && l.wiredTypeCard !== p.typeCard ? '<div style="font-size:9px;color:var(--txm)">wired ' + locEsc(l.wiredTypeCard) + '</div>' : '') + '</td>'
+                   + '<td>' + (l.hasSurvey ? p.ftuChannels : l.wiredFtuChannels) + '</td>'
+                   + '<td><b>' + (l.hasSurvey ? p.a10 : '—') + '</b></td></tr>';
+            });
+            var plannedDp = mpSum(function (l) { return l.hasSurvey ? l.plan.voltage + l.plan.current : (l.wiredPoints || []).length; });
+            h += '</tbody><tfoot><tr><th class="l">Total</th><th>' + plannedDp + '</th>'
+               + '<th>' + mpSum(function (l) { return l.hasSurvey ? l.plan.voltage : l.wiredVoltageAll; }) + '</th>'
+               + '<th>' + mpSum(function (l) { return l.hasSurvey ? l.plan.current : l.wiredCurrentAll; }) + '</th>'
+               + '<th>' + mpSum(function (l) { return l.wiredDI; }) + '</th><th></th><th></th><th></th>'
+               + '<th>' + mpSum(function (l) { return l.hasSurvey ? l.plan.ftuChannels : l.wiredFtuChannels; }) + '</th>'
+               + '<th>' + mpSum(function (l) { return l.hasSurvey ? l.plan.a10 : 0; }) + '</th></tr></tfoot></table></div>'
+               + '<div style="font-size:10px;color:var(--txl);margin-top:4px">Figures are planned from the survey; <span class="mp-gap">wired n</span> shows where Yard Config differs. Wired-only rows list what is wired. Click a row for detail.</div>'
+               + '<div id="mpDetail"></div>';
+            return h;
+        }
+
+        function mpAssetHtml() {
+            var rows = __mp.assets || [];
+            if (!rows.length) return '<div class="mp-empty">No assets found in the survey or Yard Config.</div>';
+            var h = '<div style="overflow-x:auto;border:1px solid var(--bd);border-radius:7px"><table class="st mp-t"><thead><tr>'
+                + '<th class="l">Asset</th><th class="l">Type</th><th class="l">Location(s)</th><th class="gh">No_V</th><th class="gh">No_C</th>'
+                + '<th class="l" style="min-width:220px">Voltage inputs</th><th class="l" style="min-width:160px">Current inputs</th><th class="l">Sensors</th><th>Wired V / C</th></tr></thead><tbody>';
+            rows.forEach(function (a) {
+                var hw = a.wiredVoltage + a.wiredCurrent > 0;
+                var diff = a.inSurvey && hw && (a.wiredVoltage !== a.voltage || a.wiredCurrent !== a.current);
+                var sensors = Object.keys(a.sensors || {}).sort().map(function (k) { return mpShort(k) + ' × ' + a.sensors[k]; });
+                var locs = a.locations.length ? a.locations : a.wiredLocations;
+                h += '<tr><td class="l"><b>' + locEsc(a.asset) + '</b>' + (a.inSurvey ? '' : '<div style="font-size:9px;color:var(--txl)">wired only</div>') + '</td>'
+                   + '<td class="l">' + locEsc(a.assetType || '—') + '</td>'
+                   + '<td class="l">' + mpInputs(locs) + (a.inSurvey && hw && a.wiredLocations.join() !== a.locations.join() ? '<div style="font-size:9px;color:var(--warn)">wired in ' + locEsc(a.wiredLocations.join(', ')) + '</div>' : '') + '</td>'
+                   + '<td>' + (a.inSurvey ? a.voltage : a.wiredVoltage) + '</td><td>' + (a.inSurvey ? a.current : a.wiredCurrent) + '</td>'
+                   + '<td class="l">' + mpInputs(a.voltageInputs) + '</td><td class="l">' + mpInputs(a.currentInputs) + '</td>'
+                   + '<td class="l">' + mpInputs(sensors) + '</td>'
+                   + '<td>' + (hw ? (diff ? '<span class="mp-gap">' + a.wiredVoltage + ' / ' + a.wiredCurrent + '</span>' : a.wiredVoltage + ' / ' + a.wiredCurrent) : '—') + '</td></tr>';
+            });
+            return h + '</tbody></table></div>';
+        }
+
+        function mpBomHtml() {
+            var h = '<div style="overflow-x:auto;border:1px solid var(--bd);border-radius:7px"><table class="st mp-t"><thead><tr>'
+               + '<th>#</th><th class="l">Material</th><th>Unit</th><th class="gh">Calculated</th><th class="gh">Spare</th><th class="gh">Required</th><th>Wired</th></tr></thead><tbody>';
+            (__mp.bom || []).forEach(function (b) {
+                h += '<tr><td class="dv">' + ('0' + b.no).slice(-2) + '</td><td class="l">' + locEsc(b.material) + '</td><td>' + locEsc(b.unit) + '</td>'
+                   + '<td>' + b.calculated + '</td><td>' + b.spare + '</td><td><b>' + b.required + '</b></td><td>' + (b.actual == null ? '—' : b.actual) + '</td></tr>';
+            });
+            return h + '</tbody></table></div>';
+        }
+
+        function mpSensorHtml(keys) {
+            var locs = __mp.locations || [], h = '';
+            h += '<div style="overflow-x:auto;border:1px solid var(--bd);border-radius:7px"><table class="st mp-t"><thead><tr>'
+              + '<th class="l">RF / Location</th><th>Type</th><th>Power</th><th class="gh">V</th><th class="gh">C</th><th class="gh">MintCard</th><th class="gh">C card</th><th class="gh">A10 / ADC</th>';
+            keys.forEach(function (k) { h += '<th>' + locEsc(mpShort(k)) + '</th>'; });
+            h += '<th>Wired V / C</th></tr></thead><tbody>';
+            locs.forEach(function (l, i) {
+                var p = l.plan, wired = l.clusterId ? (l.actualVoltage + ' / ' + l.actualCurrent) : '—';
+                var mism = l.clusterId && (l.actualVoltage || l.actualCurrent) && (l.actualVoltage !== p.voltage || l.actualCurrent !== p.current);
+                h += '<tr class="mp-row' + (i === __mpSel ? ' sel' : '') + '" onclick="mpSelect(' + i + ')">'
+                   + '<td class="l"><i class="bi bi-chevron-right" style="font-size:10px;color:var(--txl)"></i> ' + p.rfCluster + ' / ' + locEsc(p.location)
+                   + ((p.warnings || []).length ? ' <i class="bi bi-exclamation-triangle" style="color:var(--warn)" title="' + locEsc(p.warnings.join('\n')) + '"></i>' : '') + '</td>'
+                   + '<td>' + locEsc(l.locationType || '—') + '</td><td>' + locEsc(l.power || '—') + '</td>'
+                   + '<td>' + p.voltage + '</td><td>' + p.current + '</td><td>' + p.voltageCards + '</td><td>' + p.currentCards + '</td><td><b>' + p.a10 + '</b></td>';
+                keys.forEach(function (k) {
+                    var plan = (p.sensors || {})[k] || 0, act = (l.actualSensors || {})[k] || 0;
+                    var show = plan || '';
+                    if (l.clusterId && (l.actualVoltage || l.actualCurrent) && act !== plan) show = '<span class="mp-gap" title="Wired ' + act + ', planned ' + plan + '">' + act + ' / ' + plan + '</span>';
+                    h += '<td>' + show + '</td>';
+                });
+                h += '<td>' + (mism ? '<span class="mp-gap">' + wired + '</span>' : wired) + '</td></tr>';
+            });
+            h += '</tbody><tfoot><tr><th class="l" colspan="3">Total</th>'
+               + '<th>' + mpSum(function (l) { return l.plan.voltage; }) + '</th><th>' + mpSum(function (l) { return l.plan.current; }) + '</th>'
+               + '<th>' + mpSum(function (l) { return l.plan.voltageCards; }) + '</th><th>' + mpSum(function (l) { return l.plan.currentCards; }) + '</th>'
+               + '<th>' + mpSum(function (l) { return l.plan.a10; }) + '</th>';
+            keys.forEach(function (k) { h += '<th>' + mpSum(function (l) { return (l.plan.sensors || {})[k]; }) + '</th>'; });
+            h += '<th>' + mpSum(function (l) { return l.actualVoltage; }) + ' / ' + mpSum(function (l) { return l.actualCurrent; }) + '</th></tr></tfoot></table></div>'
+               + '<div style="font-size:10px;color:var(--txl);margin-top:4px"><span class="mp-gap">2 / 3</span> = wired in Yard Config / planned from survey. Click a row to see why each item is there.</div>'
+               + '<div id="mpDetail"></div>';
+            return h;
+        }
+
+        function mpSelect(i) {
+            var l = (__mp.locations || [])[i];
+            if (!l) return;
+            __mpSel = i;
+            $('#mpBody .mp-row').removeClass('sel').eq(i).addClass('sel');
+            var p = l.plan;
+            var why = function (a, b) { return '<div class="mp-why"><span>' + a + '</span><span>' + b + '</span></div>'; };
+            var left = '<div><h6>RF ' + p.rfCluster + ' / ' + locEsc(p.location) + '</h6>'
+                + '<div style="font-size:10px;color:var(--txm);margin-bottom:6px">' + locEsc([l.locationType, l.power, p.side ? 'Side ' + p.side : '', p.distanceFromRR ? p.distanceFromRR + ' from RR' : ''].filter(Boolean).join(' · ')) + '</div>'
+                + why('Voltage card (MintCard) × ' + p.voltageCards, p.voltage + ' voltage on lines 1–8' + (p.axleVoltageCards ? ' · ' + p.axleVoltageCards + ' axle-counter card(s), 9–10 blank' : ''))
+                + why('Current card × ' + p.currentCards, p.currentOnVoltageCards + ' current on MintCard 9–10, ' + (p.current - p.currentOnVoltageCards) + ' on current cards')
+                + why('A10 × ' + p.a10 + ' · ADC × ' + p.adc, '1 per card')
+                + why('Conductors × ' + p.conductor, '2V + C + 2')
+                + why('Spare pins', p.spareVoltagePins + ' V · ' + p.spareCurrentPins + ' C');
+            (l.gaps || []).forEach(function (g) { left += '<div class="mp-warn"><i class="bi bi-arrow-left-right me-1"></i>' + locEsc(g) + '</div>'; });
+            (p.warnings || []).forEach(function (w) { left += '<div class="mp-warn"><i class="bi bi-exclamation-triangle me-1"></i>' + locEsc(w) + '</div>'; });
+            left += '</div>';
+
+            var byAsset = {};
+            (p.points || []).forEach(function (pt) { (byAsset[pt.asset] = byAsset[pt.asset] || []).push(pt); });
+            var right = '<div><h6>Sensor points (' + (p.points || []).length + ')</h6><div style="max-height:260px;overflow:auto"><table class="st mp-t"><thead><tr><th class="l">Gear</th><th class="l">Attribute</th><th>Kind</th><th>Sensor</th></tr></thead><tbody>';
+            Object.keys(byAsset).forEach(function (a) {
+                byAsset[a].forEach(function (pt, j) {
+                    right += '<tr><td class="l">' + (j === 0 ? '<b>' + locEsc(a) + '</b>' : '') + '</td><td class="l">' + locEsc(pt.title) + '</td><td>' + locEsc(pt.kind) + '</td><td>' + locEsc(pt.type) + '</td></tr>';
+                });
+            });
+            if (!(p.points || []).length) right += '<tr><td colspan="4" style="color:var(--txm)">' + (l.hasSurvey ? 'No gear in this survey row' : 'No survey row') + '</td></tr>';
+            right += '</tbody></table></div>';
+            if ((l.wiredPoints || []).length) {
+                right += '<h6 style="margin-top:10px">Wired in Yard Config (' + l.wiredPoints.length + ' · ' + locEsc(l.wiredTypeCard || '') + ')</h6><div style="max-height:220px;overflow:auto"><table class="st mp-t"><thead><tr><th class="l">Card / line</th><th class="l">Asset</th><th class="l">Attribute</th><th>Kind</th></tr></thead><tbody>';
+                l.wiredPoints.forEach(function (w) {
+                    right += '<tr><td class="l">' + locEsc(w.card) + ' / ' + w.line + '</td><td class="l">' + locEsc(w.asset) + '</td><td class="l">' + locEsc(w.title)
+                           + (w.inMapping ? '' : ' <span style="font-size:9px;color:var(--txl)">(not in mapping)</span>') + '</td><td>' + locEsc(w.kind) + '</td></tr>';
+                });
+                right += '</tbody></table></div>';
+            }
+            right += '</div>';
+            $('#mpDetail').html('<div class="mp-det">' + left + right + '</div>');
+        }
+
+        function mpOpenReport() {
+            var siteId = mpSite();
+            if (!siteId) { E7.warn('Select a station first.'); return; }
+            window.open('@Url.Action("MaterialReport", "Station")?siteId=' + siteId + '&spare=' + mpSpare(), '_blank');
+        }
+
+        // Styled .xlsx built on the server (StationController.MaterialExcel)
+        function mpExportExcel() {
+            var siteId = mpSite();
+            if (!siteId) { E7.warn('Select a station first.'); return; }
+            window.location.href = '@Url.Action("MaterialExcel", "Station")?siteId=' + siteId + '&spare=' + mpSpare();
+        }
+
                  // ── State ─────────────────────────────────────────────────────────────────
         var __masterAssetTypes   = [];
         var __siteAssetTypes     = [];
@@ -2164,7 +3353,7 @@
             if (records.length) $('#selAN').text(records[0].assetName || '');
 
             // shared grid column template for headers + rows
-            var AWC = '22px minmax(140px,1.5fr) 150px 60px 60px 74px 66px';
+            var AWC = '18px minmax(150px,1.6fr) minmax(120px,1fr) 64px 64px 76px 76px';
 
             // Group attributes by LocationName (e.g. "TF End", "TR End", or "lc 14")
             var groups = {};
@@ -2181,17 +3370,17 @@
                 var grpKey = 'g' + (idx++);
                 var noLoc  = (loc === 'Default');
 
-                html += '<div class="aw-grp" style="--awc:' + AWC + '">';
+                html += '<div class="aw-grp' + (noLoc ? ' aw-grp-warn' : '') + '" style="--awc:' + AWC + '">';
                 html +=   '<div class="aw-ghead">'
-                      +     '<span class="aw-gname"><i class="bi bi-geo-alt"></i>' + locEsc(noLoc ? 'No location set' : loc) + '</span>'
+                      +     '<span class="aw-gname"><i class="bi ' + (noLoc ? 'bi-exclamation-circle' : 'bi-geo-alt-fill') + '"></i>' + locEsc(noLoc ? 'No location set' : loc) + '</span>'
                       +     '<span class="aw-gcount">' + rows.length + ' line' + (rows.length > 1 ? 's' : '') + '</span>'
-                      +     (noLoc ? '<span class="aw-ghint">— enter a location on each row and Save</span>' : '')
+                      +     (noLoc ? '<span class="aw-ghint">Enter a location on each row, then Save</span>' : '')
                       +     '<label class="stog" style="margin-left:auto" title="Enable / disable this group">'
                       +       '<input type="checkbox" checked onchange="togG(this,\'' + grpKey + '\')">'
                       +       '<span class="stog-sl"></span>'
                       +     '</label>'
                       +   '</div>';
-                html +=   '<div class="aw-cols"><span></span><span class="l">Attribute</span><span class="l">Location</span><span>Row</span><span>+ Trm</span><span>&minus; Trm / Seq</span><span></span></div>';
+                html +=   '<div class="aw-cols"><span></span><span class="l">Attribute</span><span class="l">Location</span><span>Row</span><span>+ Term</span><span>&minus; Term / Seq</span><span></span></div>';
 
                 rows.forEach(function (r) {
                     var attrName = r.attributeName || '';
@@ -2238,8 +3427,9 @@
             if (r.number) parts.push('L' + r.number);
             if (r.pin) parts.push((r.sequenceNumber ? 'ADC' + r.sequenceNumber + ' ' : '') + 'P' + r.pin);
             var txt = parts.join(' · ');
+            var chips = parts.map(function (p) { return '<span class="seg">' + locEsc(p) + '</span>'; }).join('<span class="sep">›</span>');
             return '<div class="aw-wired" title="Wired at: ' + locEsc(txt || 'card line ' + r.id) + '">'
-                 + '<span class="d"></span>' + locEsc(txt || 'Wired') + '</div>';
+                 + '<span class="d"></span>' + (chips || 'Wired') + '</div>';
         }
 
         // ── Card-line wiring: attributes of this asset not yet on any card line (90 Yard Config card-line popup) ──
@@ -2272,20 +3462,30 @@
                     $('#wireBox').html('<div style="padding:8px 4px;color:var(--warn);font-size:10px">This asset type has no attributes defined, so there is nothing to wire.</div>');
                     return;
                 }
-                var note = derivedN ? '<div style="padding:7px 14px 0;color:var(--txl);font-size:9px">' + derivedN + ' calculated attribute' + (derivedN > 1 ? 's' : '') + ' (no wiring needed) not listed.</div>' : '';
+                var note = derivedN ? '<div class="aw-note"><i class="bi bi-info-circle me-1"></i>' + derivedN + ' calculated attribute' + (derivedN > 1 ? 's' : '') + ' (no wiring needed) not listed.</div>' : '';
                 if (!free.length) { $('#wireBox').html(note); return; }
+                function awIsCur(a) { return (a.title || '').toLowerCase().indexOf('ma') >= 0; }
+                var volt = free.filter(function (a) { return !awIsCur(a); });
+                var curr = free.filter(awIsCur);
+                function awRow(a) {
+                    var isCur = awIsCur(a);
+                    return '<div class="ar wr aw-un" data-attr-id="' + a.id + '" data-type-id="' + typeIdV + '" data-attr-name="' + locEsc((a.title || '').toLowerCase()) + '">'
+                        + '<span class="nm">' + locEsc(a.title) + ' <span class="aw-vi ' + (isCur ? 'I' : 'V') + '">' + (isCur ? 'I' : 'V') + '</span></span>'
+                        + '<button class="wbtn" onclick="openWire(this)"><i class="bi bi-plug"></i> Wire</button>'
+                        + '</div>';
+                }
+                function awSub(label, arr, cls) {
+                    return arr.length ? '<div class="aw-sub ' + cls + '">' + label + '<span>' + arr.length + '</span></div>' + arr.map(awRow).join('') : '';
+                }
                 var h = '<div class="aw-grp">'
                       + '<div class="aw-ghead"><span class="aw-gname"><i class="bi bi-plug"></i>Not wired yet</span>'
-                      + '<span class="aw-gcount">' + free.length + ' attribute' + (free.length > 1 ? 's' : '') + '</span></div>';
-                free.forEach(function (a) {
-                    var isCur = (a.title || '').toLowerCase().indexOf('ma') >= 0;
-                    h += '<div class="ar wr aw-un" data-attr-id="' + a.id + '" data-type-id="' + typeIdV + '" data-attr-name="' + locEsc(a.title) + '">'
-                       +   '<span class="nm">' + locEsc(a.title) + ' <span class="aw-vi ' + (isCur ? 'I' : 'V') + '">' + (isCur ? 'I' : 'V') + '</span></span>'
-                       +   '<span class="st">not on any card line</span>'
-                       +   '<button class="wbtn" onclick="openWire(this)"><i class="bi bi-plug"></i> Wire</button>'
-                       + '</div>';
-                });
-                $('#wireBox').html(h + '</div>' + note);
+                      + '<span class="aw-gcount">' + free.length + ' attribute' + (free.length > 1 ? 's' : '') + ' · ' + volt.length + ' V · ' + curr.length + ' I</span>'
+                      + '<input class="aw-search" type="search" placeholder="Filter…" oninput="awFilterUnwired(this.value)">'
+                      + '</div>'
+                      + awSub('Voltage inputs', volt, 'v') + awSub('Current inputs', curr, 'i')
+                      + '<div class="aw-nomatch" style="display:none">No attribute matches your filter.</div>'
+                      + '</div>';
+                $('#wireBox').html(h + note);
             }
             if (__attrCache[typeIdV]) { draw(__attrCache[typeIdV]); return; }
             $.ajax({
@@ -2300,6 +3500,19 @@
             });
         }
 
+        // Filter the "Not wired yet" list by attribute name; hide a V/I sub-header when it has no visible rows.
+        function awFilterUnwired(q) {
+            q = (q || '').trim().toLowerCase();
+            $('#wireBox .aw-un').each(function () {
+                var name = String($(this).attr('data-attr-name') || '');
+                $(this).toggle(!q || name.indexOf(q) >= 0);
+            });
+            $('#wireBox .aw-sub').each(function () {
+                $(this).toggle($(this).nextUntil('.aw-sub, .aw-nomatch').filter(':visible').length > 0);
+            });
+            $('#wireBox .aw-nomatch').toggle($('#wireBox .aw-un:visible').length === 0);
+        }
+
         // "Wired 3 of 11 attributes" + which cards this asset uses and how many lines on each
         // Styles for the wiring summary + Wire dialog live with this feature (not in _Layout),
         // so they always ship together with the script that uses them.
@@ -2307,50 +3520,74 @@
         function ensureAssetsCss() {
             if (document.getElementById('assetsCss')) return;
             var css = ''
-              + '.aw-wrap{display:flex;flex-direction:column;gap:12px}'
-              + '.aw-grp{background:var(--sf);border:1px solid var(--bd);border-radius:10px;overflow:hidden}'
-              + '.aw-ghead{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--co-lt);border-bottom:1px solid var(--bd)}'
-              + '.aw-gname{font-size:12px;font-weight:700;color:var(--tx);display:flex;align-items:center;gap:6px}'
-              + '.aw-gname .bi{color:var(--co)}'
-              + '.aw-gcount{font-size:10px;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:1px 9px;color:var(--txm)}'
-              + '.aw-ghint{font-size:10px;color:var(--txm);font-weight:400}'
-              + '.aw-cols{display:grid;grid-template-columns:var(--awc);gap:8px;padding:6px 14px 5px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:var(--txl);border-bottom:1px solid #f0ebe9}'
-              + '.aw-cols span{text-align:center}.aw-cols span.l{text-align:left}'
-              + '.ar.aw-row{display:grid;grid-template-columns:var(--awc);gap:8px;align-items:center;padding:7px 14px;border-bottom:1px solid #f4efed;font-size:11px;transition:background .1s}'
+              + '.aw-wrap{display:flex;flex-direction:column;gap:16px}'
+              + '.aw-grp{background:var(--sf);border:1px solid var(--bd);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}'
+              + '.aw-ghead{display:flex;align-items:center;gap:10px;padding:12px 18px;background:#fcfaf9;border-bottom:1px solid var(--bd-lt)}'
+              + '.aw-gname{font-size:14px;font-weight:600;color:var(--tx);display:flex;align-items:center;gap:8px;letter-spacing:-.005em}'
+              + '.aw-gname .bi{color:var(--co);font-size:14px}'
+              + '.aw-gcount{font-size:11px;font-weight:600;background:#fff;border:1px solid var(--bd);border-radius:10px;padding:1px 9px;color:var(--txm);font-variant-numeric:tabular-nums}'
+              + '.aw-ghint{font-size:12px;color:var(--txm);font-weight:400}'
+              + '.aw-grp-warn{border-color:#f0d9b5}'
+              + '.aw-grp-warn .aw-ghead{background:#fffaf1;border-bottom-color:#f5e6cc}'
+              + '.aw-grp-warn .aw-gname .bi{color:var(--warn)}'
+              + '.aw-grp-warn .aw-gcount{border-color:#f0d9b5;color:#8a5a12}'
+              + '.aw-grp-warn .aw-ghint{color:#8a5a12}'
+              + '.aw-cols{display:grid;grid-template-columns:var(--awc);gap:10px;padding:10px 18px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--txl);border-bottom:1px solid var(--bd-lt)}'
+              + '.aw-cols span{text-align:center;white-space:nowrap}.aw-cols span.l{text-align:left}'
+              + '.ar.aw-row{display:grid;grid-template-columns:var(--awc);gap:10px;align-items:center;padding:10px 18px;border-bottom:1px solid var(--bd-lt);font-size:13px;transition:background .1s}'
               + '.ar.aw-row:last-child{border-bottom:none}'
-              + '.ar.aw-row:hover{background:#fbf9f8}'
+              + '.ar.aw-row:hover{background:var(--hv)}'
               + '.aw-name{min-width:0}'
-              + '.aw-attr{font-weight:600;color:var(--tx);display:flex;align-items:center;gap:5px}'
-              + '.aw-vi{font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;line-height:1.2}'
-              + '.aw-vi.I{background:#fdece8;color:#c0392b}.aw-vi.V{background:#e8f1fa;color:#2471a3}'
-              + '.aw-wired{font-size:9px;color:#1e7a4f;font-family:ui-monospace,Consolas,monospace;margin-top:2px;display:inline-flex;align-items:center;gap:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
-              + '.aw-wired .d{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0}'
-              + '.ar.aw-row .loc-inp,.ar.aw-row .rt-inp{width:100%;height:30px;border:1px solid var(--bd);border-radius:6px;padding:2px 8px;font-size:11px;background:#fff;transition:.12s}'
-              + '.ar.aw-row .rt-inp{text-align:center;padding:2px 4px}'
-              + '.ar.aw-row .loc-inp::placeholder{color:var(--txl)}'
-              + '.ar.aw-row .loc-inp:focus,.ar.aw-row .rt-inp:focus{border-color:var(--co);outline:none;box-shadow:0 0 0 2px var(--co-lt)}'
-              + '.ar.aw-row>input[type=checkbox]{width:15px;height:15px;accent-color:var(--co);cursor:pointer}'
-              + '.ar.aw-row .sv-btn{height:30px;background:var(--ok);border:none;color:#fff;font-size:10px;font-weight:600;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;transition:.12s}'
-              + '.ar.aw-row .sv-btn:hover{filter:brightness(1.06)}'
-              + '.aw-un{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #f4efed;font-size:11px}'
-              + '.aw-un:last-child{border-bottom:none}.aw-un:hover{background:#fbf9f8}'
-              + '.aw-un .nm{font-weight:600;color:var(--tx);display:flex;align-items:center;gap:5px}'
-              + '.aw-un .st{font-size:10px;color:var(--txl)}'
-              + '.aw-un .wbtn{margin-left:auto;background:var(--co);border:none;color:#fff;font-size:10px;font-weight:600;padding:5px 14px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:.12s}'
+              + '.aw-attr{font-size:13.5px;font-weight:600;color:var(--tx);display:flex;align-items:center;gap:6px;line-height:1.3}'
+              + '.aw-vi{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;line-height:1.4;font-family:var(--mono)}'
+              + '.aw-vi.I{background:#fdece8;color:#b8392a}.aw-vi.V{background:#e8f1fa;color:#2167a0}'
+              + '.aw-wired{font-size:11.5px;color:var(--txm);font-family:var(--mono);margin-top:4px;display:flex;align-items:center;gap:5px;max-width:100%;overflow:hidden;white-space:nowrap}'
+              + '.aw-wired .d{width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0;box-shadow:0 0 0 2px #e3f4ec}'
+              + '.aw-wired .seg{color:#3c5a4d}.aw-wired .sep{color:var(--txl);font-family:inherit}'
+              + '.ar.aw-row .loc-inp,.ar.aw-row .rt-inp{width:100%;height:34px;border:1px solid var(--bd);border-radius:7px;padding:4px 10px;font-size:13px;color:var(--tx);background:#fff;transition:.12s;font-variant-numeric:tabular-nums}'
+              + '.ar.aw-row .rt-inp{text-align:center;padding:4px}'
+              + '.ar.aw-row .loc-inp::placeholder,.ar.aw-row .rt-inp::placeholder{color:#b9aca7}'
+              + '.ar.aw-row .loc-inp:hover,.ar.aw-row .rt-inp:hover{border-color:#dcc6bf}'
+              + '.ar.aw-row .loc-inp:focus,.ar.aw-row .rt-inp:focus{border-color:var(--co);outline:none;box-shadow:0 0 0 3px var(--co-lt)!important}'
+              + '.ar.aw-row>input[type=checkbox]{width:16px;height:16px;accent-color:var(--co);cursor:pointer;margin:0}'
+              + '.ar.aw-row .sv-btn{height:34px;background:#fff;border:1px solid #b6e0cd;color:#13805c;font-size:12.5px;font-weight:600;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;transition:.12s;padding:0 10px}'
+              + '.ar.aw-row .sv-btn:hover:not(:disabled){background:var(--ok);border-color:var(--ok);color:#fff}'
+              + '.aw-un{display:flex;align-items:center;gap:10px;padding:11px 18px;border-bottom:1px solid var(--bd-lt);font-size:13px}'
+              + '.aw-un:last-child{border-bottom:none}.aw-un:hover{background:var(--hv)}'
+              + '.aw-un .nm{font-size:13.5px;font-weight:600;color:var(--tx);display:flex;align-items:center;gap:6px}'
+              + '.aw-un .st{font-size:12px;color:var(--txl)}'
+              + '.aw-un .wbtn{margin-left:auto;background:var(--co);border:none;color:#fff;font-size:12.5px;font-weight:600;padding:8px 16px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.12s}'
               + '.aw-un .wbtn:hover{background:var(--co-hv)}'
-              + '.aw-empty{padding:28px 16px;text-align:center;color:var(--txm);font-size:11px;background:var(--sf);border:1px dashed var(--bd);border-radius:10px}'
-              + '.aw-empty .bi{font-size:26px;color:var(--bd);display:block;margin-bottom:8px}';
+              + '.aw-empty{padding:36px 16px;text-align:center;color:var(--txm);font-size:13px;background:var(--sf);border:1px dashed var(--bd);border-radius:12px}'
+              + '.aw-empty .bi{font-size:30px;color:var(--bd);display:block;margin-bottom:10px}'
+              + '.aw-note{padding:10px 4px 0;color:var(--txl);font-size:12px}'
+              + '.aw-sub{display:flex;align-items:center;gap:7px;padding:10px 18px 5px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--txm);background:#fcfaf9;border-bottom:1px solid var(--bd-lt)}'
+              + '.aw-sub span{font-weight:600;background:#fff;border:1px solid var(--bd);border-radius:9px;padding:0 7px;font-size:10px}'
+              + '.aw-sub.v{color:#2167a0}.aw-sub.i{color:#b8392a}'
+              + '.aw-search{margin-left:auto;height:28px;border:1px solid var(--bd);border-radius:7px;padding:0 10px;font-size:12px;background:#fff;min-width:130px}'
+              + '.aw-search:focus{outline:none;border-color:var(--co);box-shadow:0 0 0 3px var(--co-lt)}'
+              + '.aw-nomatch{padding:14px 18px;font-size:12px;color:var(--txl);text-align:center}'
+              + '@@media(max-width:1200px){.aig{flex-direction:column}.aic{width:auto;border-right:none;border-bottom:1px solid var(--bd-lt);max-height:220px}}';
             $('head').append('<style id="assetsCss">' + css + '</style>');
         }
 
         function ensureWireCss() {
             if (document.getElementById('wireCss')) return;
             var css = ''
-              + '.wsum{border:1px solid var(--bd);background:#fff;border-radius:8px;padding:8px 12px;margin-bottom:10px}'
-              + '.wsum-bar{flex:1;max-width:260px;height:6px;background:#efe9e6;border-radius:3px;overflow:hidden}'
-              + '.wsum-bar>i{display:block;height:100%;background:var(--ok)}'
-              + '.wsum-chip{font-size:10px;border:1px solid #bfe3cf;background:#e7f5ee;color:#1e7a4f;border-radius:10px;padding:1px 8px}'
-              + '.wsum-chip b{margin-left:3px}'
+              + '.wsum{border:1px solid var(--bd);background:#fff;border-radius:12px;padding:14px 18px;margin-bottom:16px;box-shadow:var(--shadow);display:grid;grid-template-columns:auto 1fr;gap:12px 24px;align-items:center}'
+              + '.wsum-k{display:flex;align-items:baseline;gap:6px;white-space:nowrap}'
+              + '.wsum-k .n{font-size:24px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}'
+              + '.wsum-k .of{font-size:13px;color:var(--txm)}'
+              + '.wsum-p{display:flex;flex-direction:column;gap:6px;min-width:0}'
+              + '.wsum-top{display:flex;justify-content:space-between;font-size:12px;color:var(--txm)}'
+              + '.wsum-top b{color:var(--tx);font-weight:600}'
+              + '.wsum-bar{height:8px;background:#f0e9e6;border-radius:4px;overflow:hidden}'
+              + '.wsum-bar>i{display:block;height:100%;background:linear-gradient(90deg,#22b083,var(--ok));border-radius:4px;transition:width .3s}'
+              + '.wsum-cards{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-top:12px;border-top:1px solid var(--bd-lt)}'
+              + '.wsum-cards .lb{font-size:12px;color:var(--txm);margin-right:2px}'
+              + '.wsum-chip{font-size:12px;font-family:var(--mono);border:1px solid #c6e8d7;background:#effaf4;color:#17694c;border-radius:6px;padding:2px 8px}'
+              + '.wsum-chip b{margin-left:6px;font-family:Inter,sans-serif;background:#fff;border-radius:4px;padding:0 5px}'
+              + '.wsum-none{grid-column:1/-1;font-size:12px;color:var(--txl)}'
               + '#wireModal .modal-header{background:var(--co-lt);border-bottom:1px solid var(--bd);padding:12px 18px}'
               + '#wireModal .modal-title{font-size:14px;font-weight:600}'
               + '#wireModal .modal-body{padding:16px 18px}'
@@ -2407,15 +3644,17 @@
                 return '<span class="wsum-chip" title="' + perCard[k] + ' line' + (perCard[k] > 1 ? 's' : '') + ' of this asset on ' + locEsc(k) + '">'
                      + locEsc(k) + ' <b>' + perCard[k] + '</b></span>';
             }).join('');
+            var left = total - done;
             $('#wireSum').html(
                 '<div class="wsum">'
-              +   '<div style="display:flex;align-items:center;gap:10px">'
-              +     '<b style="font-size:12px">Wired ' + done + ' of ' + total + ' attributes</b>'
+              +   '<div class="wsum-k"><span class="n">' + done + '</span><span class="of">of ' + total + ' attributes wired</span></div>'
+              +   '<div class="wsum-p">'
+              +     '<div class="wsum-top"><span><b>' + pct + '%</b> complete</span>'
+              +       '<span>' + (left ? '<b>' + left + '</b> left to wire' : '<b style="color:var(--ok)">All wired</b>') + '</span></div>'
               +     '<div class="wsum-bar"><i style="width:' + pct + '%"></i></div>'
-              +     '<span style="font-size:10px;color:var(--txm)">' + (total - done) + ' left</span>'
               +   '</div>'
-              +   (chips ? '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;align-items:center"><span style="font-size:10px;color:var(--txm)">Cards used:</span>' + chips + '</div>'
-                         : '<div style="margin-top:4px;font-size:10px;color:var(--txl)">Not on any card yet — click Wire on an attribute below.</div>')
+              +   (chips ? '<div class="wsum-cards"><span class="lb">Cards used</span>' + chips + '</div>'
+                         : '<div class="wsum-none">Not on any card yet — click Wire on an attribute below.</div>')
               + '</div>');
         }
 
@@ -2700,7 +3939,6 @@
             $('#addAssetModalTitle').text(assetId ? (assetName || 'Edit Asset') : 'Add Asset');
             $('#assetModalName').val(assetName || '');
             $('#assetModalHttp').val('');
-            $('#assetModalCells').val('');
             $('#assetModalActive').prop('checked', true);
             // Point Machine section (AssetType 3) — reset to Full / Parallel
             $('#assetModalPM').toggle(__modalAssetTypeId === 3);
@@ -2735,7 +3973,6 @@
                         if (assetId) {
                             $('#assetModalName').val(asset.name || assetName || '');
                             $('#assetModalHttp').val(asset.httpMisLink || '');
-                            $('#assetModalCells').val(asset.numberOfCell != null ? asset.numberOfCell : '');
                             $('#assetModalActive').prop('checked', asset.isActive !== false);
                             $('#pmHalf').val(asset.isHalfPointMachine ? '1' : '0');
                             $('#pmSeries').val(asset.isSeriesOpration ? '1' : '0');
@@ -2944,7 +4181,6 @@
                 AssetTypeId:  __modalAssetTypeId,
                 Name:         name,
                 HttpMisLink:  $('#assetModalHttp').val().trim(),
-                NumberOfCell: parseFloat($('#assetModalCells').val()) || null,
                 IsActive:     $('#assetModalActive').is(':checked'),
                 mAssetInfos:  mAssetInfos
             };

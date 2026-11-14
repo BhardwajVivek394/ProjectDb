@@ -319,7 +319,7 @@ namespace Energy7.StationSurvey.Controllers
 
                     existing.Name = mAsset.Name;
                     existing.HttpMisLink = mAsset.HttpMisLink;
-                    existing.NumberOfCell = mAsset.NumberOfCell;
+                    // Number Of Cell is no longer edited here; the stored value is sent back unchanged.
                     existing.IsActive = mAsset.IsActive;
                     if (existing.AssetTypeId == (int)Utility.Utility.AssetType.POINT_MACHINE)
                     {
@@ -397,15 +397,23 @@ namespace Energy7.StationSurvey.Controllers
             return result;
         }
 
-        // ── AJAX: Survey gear mapping per location box — existing SiteSurvey table (same as 90 Site Survey) ──
-        public async Task<JsonResult> GetSurveyGear(int siteId)
+        // ══ SURVEY tab ═══════════════════════════════════════════════════════════════
+        // One page per station. Stored in the existing tables through the API (no schema change):
+        //   SiteSurvey row per location box  → LocationBoxNo, Cluster (RF), LocationSide, DistanceFromRR and the
+        //                                      gear columns TR, TF, PointMachine, Signal ("S1 HG,S1 RG"), AxleCounter,
+        //                                      BusBar, UFSBI, BHMS (comma lists, upper case — same as the 90 Site Survey)
+        //   SurveyPointMachine per point     → full/half, TWS A/B/Both, series LH/RH (SiteSurvey/CreatePM)
+        public async Task<JsonResult> GetSurvey(int siteId)
         {
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
                 if (loginUser == null) return Json(new { error = "Session expired." });
+                if (siteId <= 0) return Json(new { error = "Select a station first." });
                 using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
-                return Json(await GetSiteSurveyRows(hcf, siteId));
+                var rows = await GetSiteSurveyRows(hcf, siteId);
+                var pms = await GetSurveyPointMachines(hcf, siteId);
+                return Json(new { rows, pms });
             }
             catch (Exception ex) { return Json(new { error = ex.Message }); }
         }
@@ -417,57 +425,314 @@ namespace Energy7.StationSurvey.Controllers
             return JsonConvert.DeserializeObject<List<SiteSurvey>>(await response.Content.ReadAsStringAsync()) ?? new();
         }
 
-        [HttpPost]
-        public async Task<JsonResult> SaveSurveyGear([FromBody] SiteSurvey m)
+        private static async Task<List<SurveyPointMachine>> GetSurveyPointMachines(HttpClientHelper hcf, int siteId)
         {
+            var response = await hcf.Client.GetAsync($"SiteSurvey/GetPM/SiteId/{siteId}");
+            if (response.StatusCode != HttpStatusCode.OK) throw new Exception("Could not load point machine details.");
+            return JsonConvert.DeserializeObject<List<SurveyPointMachine>>(await response.Content.ReadAsStringAsync()) ?? new();
+        }
+
+        public class SurveySaveRequest
+        {
+            public int SiteId { get; set; }
+            public List<SiteSurvey> Rows { get; set; } = new();
+            public List<SurveyPointMachine> PointMachines { get; set; } = new();
+        }
+
+        // Comma list → trimmed, single-spaced, upper-case, distinct names
+        private static List<string> SurveyNames(string? v) =>
+            (v ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                     .Select(x => System.Text.RegularExpressions.Regex.Replace(x.Trim(), @"\s+", " ").ToUpperInvariant())
+                     .Where(x => x.Length > 0).Distinct().ToList();
+
+        private static string? SurveyJoin(IEnumerable<string> names)
+        {
+            var list = names.ToList();
+            return list.Count == 0 ? null : string.Join(",", list);
+        }
+
+        private static string? SurveyText(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim().ToUpperInvariant();
+
+        /// <summary>
+        /// Saves the whole survey of one station. The API checks each row on its own (TR/TF unique across the
+        /// station, new rows' RF cluster = max or max+1), so the order matters:
+        ///   1. delete rows that were removed on screen
+        ///   2. take moved TR/TF names out of their old rows first
+        ///   3. save changed and new rows (new rows in RF cluster order)
+        ///   4. save point machine details
+        /// </summary>
+        [HttpPost]
+        public async Task<JsonResult> SaveSurvey([FromBody] SurveySaveRequest m)
+        {
+            var done = 0;
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
                 if (loginUser == null) return Json(new { error = "Session expired." });
                 if (m == null || m.SiteId <= 0) return Json(new { error = "Select a station first." });
-                if (string.IsNullOrWhiteSpace(m.LocationBoxNo)) return Json(new { error = "Enter the location box." });
-                if (m.Cluster <= 0) return Json(new { error = "Enter the RF cluster number." });
+                var rows = m.Rows ?? new();
+
+                // ── Normalise + validate the whole survey before touching anything ──
+                foreach (var r in rows)
+                {
+                    r.LocationBoxNo = SurveyText(r.LocationBoxNo) ?? "";
+                    if (r.LocationBoxNo.Length == 0) return Json(new { error = "Every location needs a name." });
+                    if (r.Cluster < 1 || r.Cluster > 50) return Json(new { error = $"{r.LocationBoxNo}: RF cluster must be 1 to 50." });
+                    r.LocationSide = SurveyText(r.LocationSide);
+                    r.DistanceFromRR = string.IsNullOrWhiteSpace(r.DistanceFromRR) ? null : r.DistanceFromRR.Trim();
+                    r.LocToLocDist = string.IsNullOrWhiteSpace(r.LocToLocDist) ? null : r.LocToLocDist.Trim();
+                    r.TR = SurveyJoin(SurveyNames(r.TR)); r.TF = SurveyJoin(SurveyNames(r.TF));
+                    r.PointMachine = SurveyJoin(SurveyNames(r.PointMachine)); r.Signal = SurveyJoin(SurveyNames(r.Signal));
+                    r.AxleCounter = SurveyJoin(SurveyNames(r.AxleCounter)); r.BusBar = SurveyJoin(SurveyNames(r.BusBar));
+                    r.UFSBI = SurveyJoin(SurveyNames(r.UFSBI)); r.BHMS = SurveyJoin(SurveyNames(r.BHMS));
+                }
+                var dupLoc = rows.GroupBy(r => r.LocationBoxNo).FirstOrDefault(g => g.Count() > 1);
+                if (dupLoc != null) return Json(new { error = $"Location {dupLoc.Key} is entered twice." });
+
+                string? Twice(Func<SiteSurvey, string?> col, string what)
+                {
+                    var hit = rows.SelectMany(r => SurveyNames(col(r)).Select(n => (n, r.LocationBoxNo)))
+                                  .GroupBy(x => x.n).FirstOrDefault(g => g.Count() > 1);
+                    return hit == null ? null : $"{what} {hit.Key} is in {string.Join(" and ", hit.Select(x => x.LocationBoxNo))}. Keep it in one location.";
+                }
+                var twice = Twice(r => r.TR, "TR end of track") ?? Twice(r => r.TF, "TF end of track")
+                         ?? Twice(r => r.PointMachine, "Point machine") ?? Twice(r => r.Signal, "Signal aspect");
+                if (twice != null) return Json(new { error = twice });
+
+                var badSignal = rows.SelectMany(r => SurveyNames(r.Signal)).FirstOrDefault(s => s.Split(' ').Length != 2);
+                if (badSignal != null) return Json(new { error = $"Signal entry \"{badSignal}\" must be a name and one aspect, like S1 HG." });
 
                 using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
-                if (m.Id > 0 && !(await GetSiteSurveyRows(hcf, m.SiteId)).Any(r => r.Id == m.Id))
-                    return Json(new { error = "Survey row not found for this station." });
+                var existing = await GetSiteSurveyRows(hcf, m.SiteId);
+                var byId = existing.ToDictionary(r => r.Id);
+                if (rows.Any(r => r.Id > 0 && !byId.ContainsKey(r.Id)))
+                    return Json(new { error = "The survey was changed by someone else. Reload and try again." });
 
-                // Same normalisation as the 90 Site Survey page (upper-case text)
-                static string? U(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim().ToUpperInvariant();
-                var row = new SiteSurvey
+                // New rows: the API only accepts RF cluster = current max or max + 1
+                var keptIds = rows.Where(r => r.Id > 0).Select(r => r.Id).ToHashSet();
+                var max = existing.Where(r => keptIds.Contains(r.Id)).Select(r => r.Cluster).DefaultIfEmpty(0).Max();
+                foreach (var r in rows.Where(r => r.Id <= 0).OrderBy(r => r.Cluster))
                 {
-                    Id = m.Id, SiteId = m.SiteId, Cluster = m.Cluster, CreatedBy = loginUser.Id,
-                    LocationBoxNo = U(m.LocationBoxNo), LocationSide = U(m.LocationSide),
-                    DistanceFromRR = string.IsNullOrWhiteSpace(m.DistanceFromRR) ? null : m.DistanceFromRR.Trim(),
-                    TR = U(m.TR), TF = U(m.TF), PointMachine = U(m.PointMachine), Signal = U(m.Signal),
-                    AxleCounter = U(m.AxleCounter), BusBar = U(m.BusBar), UFSBI = U(m.UFSBI), BHMS = U(m.BHMS)
-                };
+                    if (r.Cluster > max + 1)
+                        return Json(new { error = $"{r.LocationBoxNo}: RF cluster {r.Cluster} skips a number. Use {max + 1} or lower." });
+                    max = Math.Max(max, r.Cluster);
+                }
 
-                using var str = new StringContent(JsonConvert.SerializeObject(row), Encoding.UTF8, "application/json");
-                var response = await hcf.Client.PostAsync("SiteSurvey", str);
-                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(response) });
-                return Json(new { success = true });
+                async Task<SiteSurvey> Post(SiteSurvey row)
+                {
+                    row.SiteId = m.SiteId; row.CreatedBy = loginUser.Id;
+                    using var str = new StringContent(JsonConvert.SerializeObject(row), Encoding.UTF8, "application/json");
+                    var response = await hcf.Client.PostAsync("SiteSurvey", str);
+                    if (response.StatusCode != HttpStatusCode.OK) throw new Exception(await ApiErrorMessage(response));
+                    done++;
+                    return JsonConvert.DeserializeObject<SiteSurvey>(await response.Content.ReadAsStringAsync()) ?? row;
+                }
+
+                // 1. Deleted locations (API delete removes the row — same as the 90 page)
+                foreach (var old in existing.Where(r => !keptIds.Contains(r.Id)))
+                {
+                    var response = await hcf.Client.DeleteAsync($"SiteSurvey/{old.Id}");
+                    if (response.StatusCode != HttpStatusCode.OK) throw new Exception(await ApiErrorMessage(response));
+                    done++;
+                }
+
+                // 2. Track ends moved to another location: remove them from their old row first
+                foreach (var r in rows.Where(r => r.Id > 0))
+                {
+                    var old = byId[r.Id];
+                    var oldTr = SurveyNames(old.TR); var oldTf = SurveyNames(old.TF);
+                    var keepTr = oldTr.Intersect(SurveyNames(r.TR)).ToList();
+                    var keepTf = oldTf.Intersect(SurveyNames(r.TF)).ToList();
+                    if (keepTr.Count == oldTr.Count && keepTf.Count == oldTf.Count) continue;
+                    old.TR = SurveyJoin(keepTr); old.TF = SurveyJoin(keepTf);
+                    await Post(old);
+                }
+
+                // 3. Changed and new rows. Existing rows start from the stored row so FtuBox / VC / Conductor are kept.
+                static bool Same(SiteSurvey a, SiteSurvey b) =>
+                    a.LocationBoxNo == SurveyText(b.LocationBoxNo) && a.Cluster == b.Cluster
+                    && a.LocationSide == SurveyText(b.LocationSide)
+                    && a.DistanceFromRR == (string.IsNullOrWhiteSpace(b.DistanceFromRR) ? null : b.DistanceFromRR.Trim())
+                    && a.LocToLocDist == (string.IsNullOrWhiteSpace(b.LocToLocDist) ? null : b.LocToLocDist.Trim())
+                    && a.TR == SurveyJoin(SurveyNames(b.TR)) && a.TF == SurveyJoin(SurveyNames(b.TF))
+                    && a.PointMachine == SurveyJoin(SurveyNames(b.PointMachine)) && a.Signal == SurveyJoin(SurveyNames(b.Signal))
+                    && a.AxleCounter == SurveyJoin(SurveyNames(b.AxleCounter)) && a.BusBar == SurveyJoin(SurveyNames(b.BusBar))
+                    && a.UFSBI == SurveyJoin(SurveyNames(b.UFSBI)) && a.BHMS == SurveyJoin(SurveyNames(b.BHMS));
+
+                static void Copy(SiteSurvey from, SiteSurvey to)
+                {
+                    to.LocationBoxNo = from.LocationBoxNo; to.Cluster = from.Cluster; to.LocationSide = from.LocationSide;
+                    to.DistanceFromRR = from.DistanceFromRR; to.LocToLocDist = from.LocToLocDist; to.TR = from.TR; to.TF = from.TF; to.PointMachine = from.PointMachine;
+                    to.Signal = from.Signal; to.AxleCounter = from.AxleCounter; to.BusBar = from.BusBar; to.UFSBI = from.UFSBI; to.BHMS = from.BHMS;
+                }
+
+                var original = await GetSiteSurveyRows(hcf, m.SiteId);   // after steps 1-2
+                var origById = original.ToDictionary(r => r.Id);
+                foreach (var r in rows.Where(r => r.Id > 0))
+                {
+                    var stored = origById[r.Id];
+                    if (Same(r, stored)) continue;
+                    Copy(r, stored);
+                    await Post(stored);
+                }
+                max = original.Select(r => r.Cluster).DefaultIfEmpty(0).Max();
+                foreach (var r in rows.Where(r => r.Id <= 0).OrderBy(r => r.Cluster))
+                {
+                    var row = new SiteSurvey();
+                    Copy(r, row);
+                    if (r.Cluster < max)
+                    {
+                        // API rejects a new row below the current max: create it in the max cluster, then move it
+                        row.Cluster = max;
+                        var created = await Post(row);
+                        if (created.Id <= 0) throw new Exception($"{r.LocationBoxNo}: could not move it to RF cluster {r.Cluster}.");
+                        created.Cluster = r.Cluster;
+                        await Post(created);
+                    }
+                    else
+                    {
+                        await Post(row);
+                        max = Math.Max(max, r.Cluster);
+                    }
+                }
+
+                // 4. Point machine details (API upserts by name; points removed from the survey are left as they are)
+                //    IsSeriesOpration = Series / Parallel, IsHalfPointMachine = one end only,
+                //    SeriesOprationTypeId = which end for a one-end point (1 = A / Normal end, 2 = B / Reverse end);
+                //    for a full point it keeps whatever was stored (LH/RH from the 90 page).
+                var pmNames = rows.SelectMany(r => SurveyNames(r.PointMachine)).ToHashSet();
+                var pms = (m.PointMachines ?? new())
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Name) && pmNames.Contains(p.Name.Trim().ToUpperInvariant()))
+                    .Select(p => new SurveyPointMachine
+                    {
+                        SiteId = m.SiteId, Name = p.Name.Trim().ToUpperInvariant(),
+                        IsHalfPointMachine = p.IsHalfPointMachine,
+                        IsThickWave = p.IsThickWave, ThickWaveTypeId = p.IsThickWave ? p.ThickWaveTypeId : null,
+                        IsSeriesOpration = p.IsSeriesOpration,
+                        SeriesOprationTypeId = p.SeriesOprationTypeId is 1 or 2 ? p.SeriesOprationTypeId : null,
+                        MachineA = p.MachineA, MachineB = p.MachineB
+                    }).ToList();
+                if (pms.Count > 0)
+                {
+                    using var str = new StringContent(JsonConvert.SerializeObject(pms), Encoding.UTF8, "application/json");
+                    var response = await hcf.Client.PostAsync("SiteSurvey/CreatePM", str);
+                    if (response.StatusCode != HttpStatusCode.NoContent && response.StatusCode != HttpStatusCode.OK)
+                        throw new Exception(await ApiErrorMessage(response));
+                }
+
+                // 5. Auto-propagate to Location (Cluster) + Assets. Create-only, idempotent, best-effort:
+                //    never fails the save. Yard card-line wiring is NOT generated (it needs cards/ADC/pins
+                //    the survey does not have — that stays a manual Yard Config step).
+                object? propagated = null;
+                try { propagated = await PropagateSurvey(hcf, m.SiteId, loginUser.Id); }
+                catch { /* best-effort only */ }
+
+                return Json(new { success = true, propagated });
             }
-            catch (Exception ex) { return Json(new { error = ex.Message }); }
+            catch (Exception ex)
+            {
+                return Json(new { error = done > 0 ? $"{ex.Message} Part of the survey was already saved, so reload before editing again." : ex.Message, partial = done > 0 });
+            }
         }
 
-        [HttpPost]
-        public async Task<JsonResult> DeleteSurveyGear(int id, int siteId)
+        // ══ Survey → Location + Assets propagation ═══════════════════════════════════════
+        // Create-only + idempotent: never edits or deletes an existing Cluster/Asset, only adds the
+        // ones the survey has that are missing. Name-based (the API has no survey→entity link), so
+        // re-saving a survey will not duplicate. Yard CardLine wiring is intentionally NOT created:
+        // it needs cards / ADC / pins that the survey does not capture.
+        //   Gear → AssetTypeId (Utility.SiteSurveyAssetType): TF/TR → Track (1, one "…T" per track),
+        //   Signal column (signal/shunt/route/CO-ON) → Signal (2), Point → Point Machine (3),
+        //   Axle counter → 4, Bus bar → 14, UFSBI → 23, BHMS → 28.
+        private async Task<object?> PropagateSurvey(HttpClientHelper hcf, int siteId, int createdBy)
         {
-            try
-            {
-                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
-                if (loginUser == null) return Json(new { error = "Session expired." });
-                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
-                if (!(await GetSiteSurveyRows(hcf, siteId)).Any(r => r.Id == id))
-                    return Json(new { error = "Survey row not found for this station." });
+            var site = _siteService.Get(siteId);
+            if (site == null || site.Id != siteId) return null;
 
-                // API SiteSurvey delete removes the row (no soft delete) — same as the 90 page
-                var response = await hcf.Client.DeleteAsync($"SiteSurvey/{id}");
-                if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = await ApiErrorMessage(response) });
-                return Json(new { success = true });
+            var rows = await GetSiteSurveyRows(hcf, siteId);
+            var pms = await GetSurveyPointMachines(hcf, siteId);
+            var pmByName = pms.Where(p => !string.IsNullOrWhiteSpace(p.Name))
+                              .GroupBy(p => p.Name.Trim().ToUpperInvariant())
+                              .ToDictionary(g => g.Key, g => g.First());
+
+            int locCreated = 0, assetCreated = 0, failed = 0;
+
+            // ── 1. Locations → Clusters named "cluster_{RF}/{box}", default Outdoor (TypeId 2) ──
+            var clResp = await hcf.Client.GetAsync($"Cluster/SiteId/{siteId}");
+            var clusters = clResp.StatusCode == HttpStatusCode.OK
+                ? JsonConvert.DeserializeObject<List<Cluster>>(await clResp.Content.ReadAsStringAsync()) ?? new()
+                : new List<Cluster>();
+            var haveLoc = clusters.Select(c => SplitClusterName(c.Name).location.Trim().ToUpperInvariant())
+                                  .Where(s => s.Length > 0).ToHashSet();
+            foreach (var r in rows)
+            {
+                var loc = (r.LocationBoxNo ?? "").Trim();
+                if (loc.Length == 0 || loc.Contains('/') || r.Cluster < 1 || r.Cluster > 50) continue;
+                if (!haveLoc.Add(loc.ToUpperInvariant())) continue;   // already exists / duplicate in survey
+                var cluster = new Cluster
+                {
+                    SiteId = siteId, Name = $"cluster_{r.Cluster}/{loc}", TypeId = 2, PowerSupplyId = null, CreatedBy = createdBy,
+                    CurrentCardNumbers = new(), V5Numbers = new(), V82Numbers = new(), MintCardNumbers = new(), DINumbers = new()
+                };
+                using var str = new StringContent(JsonConvert.SerializeObject(cluster), Encoding.UTF8, "application/json");
+                var resp = await hcf.Client.PostAsync("Cluster", str);
+                if (resp.StatusCode == HttpStatusCode.OK) locCreated++;
+                else { failed++; haveLoc.Remove(loc.ToUpperInvariant()); }
             }
-            catch (Exception ex) { return Json(new { error = ex.Message }); }
+
+            // ── 2. Gears → Assets (create-only) ──
+            var asResp = await hcf.Client.GetAsync($"Asset/GetAll/{siteId}");
+            var assets = asResp.StatusCode == HttpStatusCode.OK
+                ? JsonConvert.DeserializeObject<List<Asset>>(await asResp.Content.ReadAsStringAsync()) ?? new()
+                : new List<Asset>();
+            string Key(int t, string? n) => t + ":" + (n ?? "").Trim().ToUpperInvariant();
+            var haveAsset = assets.Select(a => Key(a.AssetTypeId, a.Name)).ToHashSet();
+
+            string TrackBase(string n) => System.Text.RegularExpressions.Regex.Replace(n.Trim(), "T[FR]$", "T");
+            var want = new List<(int type, string name)>();
+            foreach (var r in rows)
+            {
+                foreach (var n in SurveyNames(r.TF)) want.Add((1, TrackBase(n)));
+                foreach (var n in SurveyNames(r.TR)) want.Add((1, TrackBase(n)));
+                foreach (var e in SurveyNames(r.Signal)) want.Add((2, e.Split(' ')[0]));   // "S1 HG" → "S1"
+                foreach (var n in SurveyNames(r.PointMachine)) want.Add((3, n));
+                foreach (var n in SurveyNames(r.AxleCounter)) want.Add((4, n));
+                foreach (var n in SurveyNames(r.BusBar)) want.Add((14, n));
+                foreach (var n in SurveyNames(r.UFSBI)) want.Add((23, n));
+                foreach (var n in SurveyNames(r.BHMS)) want.Add((28, n));
+            }
+            foreach (var (type, rawName) in want)
+            {
+                var name = (rawName ?? "").Trim();
+                if (name.Length == 0) continue;
+                var key = Key(type, name);
+                if (!haveAsset.Add(key)) continue;   // exists or already created this run
+                var asset = new Asset
+                {
+                    Id = 0, SiteId = siteId, AssetTypeId = type, Name = name, IsActive = true,
+                    ZoneId = site.ZoneId, DivisionId = site.DivisionId, CreatedBy = createdBy,
+                    mAssetInfos = new()
+                };
+                if (type == 3 && pmByName.TryGetValue(name.ToUpperInvariant(), out var pm))
+                {
+                    asset.IsHalfPointMachine = pm.IsHalfPointMachine;
+                    asset.IsSeriesOpration = pm.IsSeriesOpration;
+                    asset.SeriesOprationTypeId = pm.SeriesOprationTypeId;
+                    asset.IsThickWave = pm.IsThickWave;
+                    asset.ThickWaveTypeId = pm.ThickWaveTypeId;
+                }
+                try
+                {
+                    using var str = new StringContent(JsonConvert.SerializeObject(asset), Encoding.UTF8, "application/json");
+                    var resp = await hcf.Client.PostAsync("Asset/SaveAsset", str);
+                    var ok = resp.StatusCode == HttpStatusCode.OK
+                             && (JsonConvert.DeserializeObject<APIResponse>(await resp.Content.ReadAsStringAsync())?.IsSuccess ?? false);
+                    if (ok) assetCreated++;
+                    else { failed++; haveAsset.Remove(key); }
+                }
+                catch { failed++; haveAsset.Remove(key); }
+            }
+
+            return new { locations = locCreated, assets = assetCreated, failed };
         }
 
         // API returns validation errors as 400 with the message as a JSON string body ("\"Signal: ...\"")
@@ -582,6 +847,38 @@ namespace Energy7.StationSurvey.Controllers
                 using var str = new StringContent(JsonConvert.SerializeObject(cluster), Encoding.UTF8, "application/json");
                 var response = await hcf.Client.PostAsync("Cluster", str);
                 if (response.StatusCode != HttpStatusCode.OK) return Json(new { error = "Internal server error." });
+                return Json(new { success = true });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        public class DeleteLocationRequest
+        {
+            public int Id { get; set; }        // Cluster (location) id
+            public int SiteId { get; set; }
+        }
+
+        // ── Soft-delete a location: API DELETE Cluster/{id}/UserId/{userId} sets DeletedBy/DeletedDate
+        //    (the row is kept; its ADCs and cards are cascaded by the API's ClusterService.Delete). ──
+        [HttpPost]
+        public async Task<JsonResult> DeleteLocation([FromBody] DeleteLocationRequest m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.Id <= 0) return Json(new { error = "Location not found." });
+
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+
+                // Verify the cluster exists and belongs to this station before deleting
+                var cluster = await GetClusterFromApi(hcf, m.Id);
+                if (cluster == null || cluster.Id != m.Id) return Json(new { error = "Location not found." });
+                if (m.SiteId > 0 && cluster.SiteId != m.SiteId) return Json(new { error = "Location does not belong to this station." });
+
+                var response = await hcf.Client.DeleteAsync($"Cluster/{m.Id}/UserId/{loginUser.Id}");
+                if (response.StatusCode != HttpStatusCode.NoContent && response.StatusCode != HttpStatusCode.OK)
+                    return Json(new { error = await ApiErrorMessage(response) });
                 return Json(new { success = true });
             }
             catch (Exception ex) { return Json(new { error = ex.Message }); }
@@ -1064,6 +1361,182 @@ namespace Energy7.StationSurvey.Controllers
             catch (Exception ex) { return Json(new { error = ex.Message }); }
         }
 
+        public class GenerateYardRequest
+        {
+            public int SiteId { get; set; }
+            public int ClusterId { get; set; }
+        }
+
+        // ══ PERSIST: generate cards + ADCs + card-line wiring for ONE cluster from the survey ═══════
+        // Scope: selected cluster only, and only when it has NO cards yet (create-only, no clashes).
+        // Wires each asset's own physical attributes — V = voltage, I = title contains "mA".
+        // DB pin rules (PinRuleError): MintCard 1-8 = voltage, MintCard 9-10 = current, C card = current.
+        // So NO buckel here (current never on MintCard 1-8): current → MintCard 9-10 then CI cards.
+        [HttpPost]
+        public async Task<JsonResult> GenerateYardForCluster([FromBody] GenerateYardRequest m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.SiteId <= 0 || m.ClusterId <= 0) return Json(new { error = "Select a cluster first." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+
+                var cluster = await GetClusterFromApi(hcf, m.ClusterId);
+                if (cluster == null || cluster.Id != m.ClusterId || cluster.SiteId != m.SiteId)
+                    return Json(new { error = "Cluster not found on this station." });
+
+                // Only an empty cluster (so we never clash with manually-added cards)
+                var curCardsResp = await hcf.Client.GetAsync($"Card/ClusterId/{m.ClusterId}");
+                var curCards = curCardsResp.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<Card>>(await curCardsResp.Content.ReadAsStringAsync()) ?? new() : new();
+                if (curCards.Count > 0)
+                    return Json(new { error = "This cluster already has cards. Generation runs only on an empty cluster — clear its cards or wire manually." });
+
+                // Survey location matching this cluster → gear names → (assetType, assetName)
+                var (_, locName) = SplitClusterName(cluster.Name);
+                var rows = await GetSiteSurveyRows(hcf, m.SiteId);
+                var row = rows.FirstOrDefault(r => string.Equals((r.LocationBoxNo ?? "").Trim(), locName, StringComparison.OrdinalIgnoreCase));
+                if (row == null) return Json(new { error = $"No survey location named \"{locName}\". Add it on the Survey tab first." });
+
+                string TrackBase(string n) => System.Text.RegularExpressions.Regex.Replace(n.Trim(), "T[FR]$", "T");
+                var want = new List<(int type, string name)>();
+                foreach (var n in SurveyNames(row.TF)) want.Add((1, TrackBase(n)));
+                foreach (var n in SurveyNames(row.TR)) want.Add((1, TrackBase(n)));
+                foreach (var e in SurveyNames(row.Signal)) want.Add((2, e.Split(' ')[0]));
+                foreach (var n in SurveyNames(row.PointMachine)) want.Add((3, n));
+                foreach (var n in SurveyNames(row.AxleCounter)) want.Add((4, n));
+                foreach (var n in SurveyNames(row.BusBar)) want.Add((14, n));
+                foreach (var n in SurveyNames(row.UFSBI)) want.Add((23, n));
+                foreach (var n in SurveyNames(row.BHMS)) want.Add((28, n));
+                want = want.GroupBy(x => x.type + ":" + x.name.ToUpperInvariant()).Select(g => g.First()).ToList();
+                if (want.Count == 0) return Json(new { error = "This location has no wireable gears in the survey." });
+
+                // Match gears to real assets
+                var asResp = await hcf.Client.GetAsync($"Asset/GetAll/{m.SiteId}");
+                var assets = asResp.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<Asset>>(await asResp.Content.ReadAsStringAsync()) ?? new() : new();
+                var assetByKey = assets.GroupBy(a => a.AssetTypeId + ":" + (a.Name ?? "").Trim().ToUpperInvariant())
+                                       .ToDictionary(g => g.Key, g => g.First());
+                var matched = new List<Asset>(); var missingAssets = new List<string>();
+                foreach (var (type, name) in want)
+                    if (assetByKey.TryGetValue(type + ":" + name.ToUpperInvariant(), out var a)) matched.Add(a);
+                    else missingAssets.Add(name);
+                if (matched.Count == 0) return Json(new { error = "None of this location's gears have matching assets yet. Save the survey first (it creates the assets)." });
+
+                // Already-wired attributes anywhere on the station → skip
+                var siteLinesResp = await hcf.Client.GetAsync($"CardLine/SiteId/{m.SiteId}");
+                var siteLines = siteLinesResp.StatusCode == HttpStatusCode.OK
+                    ? JsonConvert.DeserializeObject<List<CardLine>>(await siteLinesResp.Content.ReadAsStringAsync()) ?? new() : new();
+                var wiredSet = siteLines.Where(l => l.AssetId > 0 && l.AttributeId > 0)
+                                        .Select(l => l.AssetId + ":" + l.AttributeId).ToHashSet();
+
+                // Each matched asset's physical attributes, classified V/I
+                var volt = new Queue<(int assetId, int typeId, int attrId)>();
+                var curr = new Queue<(int assetId, int typeId, int attrId)>();
+                var attrCache = new Dictionary<int, List<AssetAttribute>>();
+                foreach (var a in matched)
+                {
+                    if (!attrCache.TryGetValue(a.AssetTypeId, out var attrs))
+                    {
+                        var ar = await hcf.Client.GetAsync($"AssetAttribute/AssetTypeId/{a.AssetTypeId}");
+                        attrs = ar.StatusCode == HttpStatusCode.OK
+                            ? JsonConvert.DeserializeObject<List<AssetAttribute>>(await ar.Content.ReadAsStringAsync()) ?? new() : new();
+                        attrCache[a.AssetTypeId] = attrs;
+                    }
+                    foreach (var at in attrs)
+                    {
+                        if (at.IsDerived == true) continue;                       // calculated, not wireable
+                        if (wiredSet.Contains(a.Id + ":" + at.Id)) continue;      // already wired
+                        if ((at.Title ?? "").ToLower().Contains("ma")) curr.Enqueue((a.Id, a.AssetTypeId, at.Id));
+                        else volt.Enqueue((a.Id, a.AssetTypeId, at.Id));
+                    }
+                }
+                int V = volt.Count, C = curr.Count;
+                if (V + C == 0) return Json(new { error = "Every attribute of this location's assets is already wired." });
+
+                // DB-valid card sizing (no buckel): MintCard current capacity = 2 per card (pins 9-10)
+                int ai = V > 0 ? (int)Math.Ceiling(V / 8.0) : 0;
+                int ci = ai == 0 ? (int)Math.Ceiling(C / 10.0)
+                                 : (C <= 2 * ai ? 0 : (int)Math.Ceiling((C - 2 * ai) / 10.0));
+                int totalCards = ai + ci;
+
+                // Create the cards in one Cluster save (API makes each card with its empty lines)
+                cluster.CurrentCardNumbers = new(); cluster.V5Numbers = new(); cluster.V82Numbers = new();
+                cluster.MintCardNumbers = new(); cluster.DINumbers = new();
+                if (ai > 0) { cluster.MintCardNumbers = Enumerable.Range(1, ai).ToList(); cluster.MintCard = Math.Max(cluster.MintCard, ai); }
+                if (ci > 0) { cluster.CurrentCardNumbers = Enumerable.Range(1, ci).ToList(); cluster.CurrentCard = Math.Max(cluster.CurrentCard, ci); }
+                cluster.CreatedBy = loginUser.Id;
+                using (var cstr = new StringContent(JsonConvert.SerializeObject(cluster), Encoding.UTF8, "application/json"))
+                {
+                    var cr = await hcf.Client.PostAsync("Cluster", cstr);
+                    if (cr.StatusCode != HttpStatusCode.OK) return Json(new { error = "Could not create cards: " + await ApiErrorMessage(cr) });
+                }
+
+                // One ADC per card (SequenceNumber auto = 1..totalCards)
+                for (int i = 1; i <= totalCards; i++)
+                {
+                    var adc = new ADC { ClusterId = m.ClusterId, SiteId = m.SiteId, SequenceNumber = i, ADCNumber = i, ADCTypeId = 2, CreatedBy = loginUser.Id };
+                    using var astr = new StringContent(JsonConvert.SerializeObject(adc), Encoding.UTF8, "application/json");
+                    await hcf.Client.PostAsync("ADC", astr);   // best-effort
+                }
+
+                // Re-read cards, lines, ADCs
+                var cards = JsonConvert.DeserializeObject<List<Card>>(await (await hcf.Client.GetAsync($"Card/ClusterId/{m.ClusterId}")).Content.ReadAsStringAsync()) ?? new();
+                var adcs = JsonConvert.DeserializeObject<List<ADC>>(await (await hcf.Client.GetAsync($"ADC/ClusterId/{m.ClusterId}")).Content.ReadAsStringAsync()) ?? new();
+                var adcBySeq = adcs.GroupBy(a => a.SequenceNumber).ToDictionary(g => g.Key, g => g.First().Id);
+                Card Named(string nm) => cards.FirstOrDefault(c => string.Equals(c.CardName, nm, StringComparison.OrdinalIgnoreCase));
+                var mintCards = Enumerable.Range(1, ai).Select(i => Named("MintCard-" + i)).Where(c => c != null).ToList();
+                var ciCards = Enumerable.Range(1, ci).Select(i => Named("C-" + i)).Where(c => c != null).ToList();
+
+                var linesByCard = new Dictionary<int, List<CardLine>>();
+                foreach (var c in mintCards.Concat(ciCards))
+                    linesByCard[c.Id] = JsonConvert.DeserializeObject<List<CardLine>>(await (await hcf.Client.GetAsync($"CardLine/CardId/{c.Id}")).Content.ReadAsStringAsync()) ?? new();
+
+                int wired = 0, failed = 0;
+                async Task<bool> WirePin(Card card, int seq, int pin, (int assetId, int typeId, int attrId) inp)
+                {
+                    var line = linesByCard[card.Id].FirstOrDefault(l => l.Number == pin && !(l.AssetId > 0));
+                    if (line == null) return false;
+                    int? adcId = adcBySeq.TryGetValue(seq, out var aid) ? aid : (int?)null;
+                    var rowCL = new CardLine
+                    {
+                        Id = line.Id, CardId = card.Id, Number = line.Number, CreatedBy = loginUser.Id, SiteId = m.SiteId,
+                        AssetTypeId = inp.typeId, AssetId = inp.assetId, AttributeId = inp.attrId, ADCId = adcId, Pin = pin
+                    };
+                    using var str = new StringContent(JsonConvert.SerializeObject(rowCL), Encoding.UTF8, "application/json");
+                    var resp = await hcf.Client.PostAsync("CardLine", str);
+                    if (resp.StatusCode == HttpStatusCode.OK) { line.AssetId = inp.assetId; return true; }
+                    return false;
+                }
+
+                // voltage → MintCard pins 1-8
+                for (int ci2 = 0; ci2 < mintCards.Count; ci2++)
+                    for (int pin = 1; pin <= 8 && volt.Count > 0; pin++)
+                    { var ok = await WirePin(mintCards[ci2], ci2 + 1, pin, volt.Peek()); volt.Dequeue(); if (ok) wired++; else failed++; }
+                // current → MintCard pins 9-10
+                for (int ci2 = 0; ci2 < mintCards.Count; ci2++)
+                    for (int pin = 9; pin <= 10 && curr.Count > 0; pin++)
+                    { var ok = await WirePin(mintCards[ci2], ci2 + 1, pin, curr.Peek()); curr.Dequeue(); if (ok) wired++; else failed++; }
+                // current → CI cards pins 1-10
+                for (int k = 0; k < ciCards.Count; k++)
+                    for (int pin = 1; pin <= 10 && curr.Count > 0; pin++)
+                    { var ok = await WirePin(ciCards[k], ai + k + 1, pin, curr.Peek()); curr.Dequeue(); if (ok) wired++; else failed++; }
+
+                return Json(new
+                {
+                    success = true,
+                    cards = totalCards,
+                    adcs = totalCards,
+                    wired,
+                    failed,
+                    leftover = volt.Count + curr.Count,
+                    missingAssets = missingAssets.Distinct().ToList()
+                });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
         // "C-2" → ("C-", 2) so cards sort C-1, C-2 … C-10, then V5-1 …
         private static (string, int) CardSortKey(string? name)
         {
@@ -1138,6 +1611,14 @@ namespace Energy7.StationSurvey.Controllers
                 if (line == null) return Json(new { error = "Card line not found on this card." });
                 if (line.AssetId > 0) return Json(new { error = "This line is already used by another asset. Pick a free line." });
                 line.CardId = m.CardId;   // the fallback rows of CardLine/CardId may omit it
+
+                // Card pin rules (C = current only; MintCard 1-8 voltage, 9-10 current)
+                var pinMap = await TryGetSensorMapByAttribute(hcf);
+                var onCard = cardLines.Where(l => l.Id != line.Id && l.AssetId > 0 && l.AttributeId > 0)
+                                      .Select(l => (l.Number, l.AttributeId!.Value)).ToList();
+                onCard.Add((line.Number, m.AttributeId));
+                var pinError = PinRuleError(clusterCards.First(c => c.Id == m.CardId).CardName, onCard, pinMap);
+                if (pinError != null) return Json(new { error = pinError });
 
                 // Same duplicate rules as API CardLineService.Save — checked here because the API
                 // turns them into a bare 500 "Internal Server Error"
@@ -1254,6 +1735,17 @@ namespace Energy7.StationSurvey.Controllers
                     }
                 }
 
+                // Card pin rules on the card's final state (C = current only; MintCard 1-8 voltage, 9-10 current)
+                var pinMap = await TryGetSensorMapByAttribute(hcf);
+                var finalOnCard = cardLines.Select(l =>
+                {
+                    var p = planned.FirstOrDefault(x => x.existing.Id == l.Id);
+                    if (p.existing != null) return p.wire ? (l.Number, p.want.AttributeId) : (l.Number, (int?)null);
+                    return (l.Number, l.AssetId > 0 ? l.AttributeId : null);
+                }).Where(x => x.Item2 > 0).Select(x => (x.Number, x.Item2!.Value)).ToList();
+                var pinError = PinRuleError(clusterCards.First(c => c.Id == m.CardId).CardName, finalOnCard, pinMap);
+                if (pinError != null) return Json(new { error = pinError });
+
                 // Apply only the lines whose mapping changed
                 int changed = 0;
                 foreach (var (existing, w, wire) in planned)
@@ -1293,6 +1785,222 @@ namespace Energy7.StationSurvey.Controllers
             var name = (c.AttributeName ?? "").ToLower();
             return name.Contains("ma")
                 || (c.AssetTypeId == (int)Utility.Utility.AssetType.POINT_MACHINE && name.Contains("-c"));
+        }
+
+        // ══ Material Positioning (survey → AttributeSensorMapping → cards / A10 / ADC) ══════════
+
+        private static async Task<List<AttributeSensorMapping>> GetSensorMapping(HttpClientHelper hcf)
+        {
+            var response = await hcf.Client.GetAsync("AssetAttribute/GetSensorMapping");
+            if (response.StatusCode != HttpStatusCode.OK) throw new Exception("Could not load the attribute sensor mapping from the API.");
+            return JsonConvert.DeserializeObject<List<AttributeSensorMapping>>(await response.Content.ReadAsStringAsync()) ?? new();
+        }
+
+        // Pin-rule check must not block wiring while the API endpoint is not deployed yet
+        private static async Task<Dictionary<int, AttributeSensorMapping>> TryGetSensorMapByAttribute(HttpClientHelper hcf)
+        {
+            try
+            {
+                return (await GetSensorMapping(hcf)).GroupBy(m => m.AssetAttributeId).ToDictionary(g => g.Key, g => g.First());
+            }
+            catch { return new(); }
+        }
+
+        private async Task<StationMaterialPositioning> BuildMaterialPositioning(HttpClientHelper hcf, int siteId, decimal sparePercent, User loginUser)
+        {
+            var map = await GetSensorMapping(hcf);
+            var rows = await GetSiteSurveyRows(hcf, siteId);
+
+            var pms = new List<SurveyPointMachine>();
+            var pmResp = await hcf.Client.GetAsync($"SiteSurvey/GetPM/SiteId/{siteId}");
+            if (pmResp.StatusCode == HttpStatusCode.OK)
+                pms = JsonConvert.DeserializeObject<List<SurveyPointMachine>>(await pmResp.Content.ReadAsStringAsync()) ?? new();
+
+            // Yard Config clusters ("cluster_{RF}/{location}") and wired lines → actual figures
+            var clusters = new List<Cluster>();
+            var clResp = await hcf.Client.GetAsync($"Cluster/SiteId/{siteId}");
+            if (clResp.StatusCode == HttpStatusCode.OK)
+                clusters = JsonConvert.DeserializeObject<List<Cluster>>(await clResp.Content.ReadAsStringAsync()) ?? new();
+            var fullClusters = (await Task.WhenAll(clusters.Select(c => GetClusterFromApi(hcf, c.Id)))).Where(c => c != null).Select(c => c!).ToList();
+            var lines = new List<CardLine>();
+            var lnResp = await hcf.Client.GetAsync($"CardLine/SiteId/{siteId}");
+            if (lnResp.StatusCode == HttpStatusCode.OK)
+                lines = JsonConvert.DeserializeObject<List<CardLine>>(await lnResp.Content.ReadAsStringAsync()) ?? new();
+            var mapByAttr = map.GroupBy(m => m.AssetAttributeId).ToDictionary(g => g.Key, g => g.First());
+
+            var site = _siteService.Get(siteId);
+            var result = new StationMaterialPositioning
+            {
+                SiteId = siteId,
+                StationName = site?.Name ?? "",
+                StationCode = site?.StationCode ?? "",
+                ZoneDivision = string.Join(" / ", new[] { site?.ZoneName, site?.DivisionName }.Where(x => !string.IsNullOrWhiteSpace(x))),
+                PreparedBy = string.IsNullOrWhiteSpace(loginUser.Name) ? (loginUser.UserName ?? "") : loginUser.Name,
+                GeneratedAt = DateTime.Now,
+                SparePercent = sparePercent,
+                MappingRows = map.Count
+            };
+            if (map.Count == 0) result.Warnings.Add("AttributeSensorMapping returned no rows — nothing can be calculated.");
+
+            foreach (var row in rows.OrderBy(r => r.Cluster).ThenBy(r => r.LocationBoxNo))
+            {
+                var plan = MaterialPositioning.Calculate(row, map, pms);
+                var loc = new StationLocation { Plan = plan };
+                var cluster = fullClusters.FirstOrDefault(c =>
+                {
+                    var (rf, name) = SplitClusterName(c.Name);
+                    return rf == row.Cluster && string.Equals(name, plan.Location, StringComparison.OrdinalIgnoreCase);
+                });
+                if (cluster != null)
+                {
+                    FillWired(loc, cluster);
+                    if (loc.WiredPoints.Count > 0)
+                    {
+                        if (loc.ActualVoltage != plan.Voltage) loc.Gaps.Add($"Voltage points: planned {plan.Voltage}, wired {loc.ActualVoltage}");
+                        if (loc.ActualCurrent != plan.Current) loc.Gaps.Add($"Current points: planned {plan.Current}, wired {loc.ActualCurrent}");
+                        if (loc.ActualVoltageCards > plan.VoltageCards) loc.Gaps.Add($"Voltage cards: planned {plan.VoltageCards}, used {loc.ActualVoltageCards}");
+                        if (loc.ActualCurrentCards > plan.CurrentCards) loc.Gaps.Add($"Current cards: planned {plan.CurrentCards}, used {loc.ActualCurrentCards}");
+                    }
+                }
+                else
+                {
+                    plan.Warnings.Add($"No Yard Config location \"cluster_{row.Cluster}/{plan.Location}\" — wired figures not compared.");
+                }
+                result.Locations.Add(loc);
+            }
+
+            // Yard Config clusters with no survey gear row (relay room, IPS …) — shown with their wired points only
+            foreach (var c in fullClusters.Where(c => !result.Locations.Any(l => l.ClusterId == c.Id)).OrderBy(c => SplitClusterName(c.Name).rf ?? int.MaxValue))
+            {
+                var (rf, name) = SplitClusterName(c.Name);
+                var loc = new StationLocation
+                {
+                    HasSurvey = false,
+                    Plan = new MaterialPositioning.LocationResult { RfCluster = rf ?? 0, Location = name }
+                };
+                FillWired(loc, c);
+                if (loc.WiredPoints.Count == 0) continue;
+                loc.Plan.Warnings.Add("No survey gear row for this location — only the wired lines are shown.");
+                result.Locations.Add(loc);
+            }
+
+            result.Bom = MaterialPositioning.Bom(result.Locations, sparePercent);
+            result.Assets = MaterialPositioning.Assets(result.Locations);
+            return result;
+
+            // Wired lines of one Yard Config cluster → WiredPoints, actual counts and cards in use
+            void FillWired(StationLocation loc, Cluster cluster)
+            {
+                loc.ClusterId = cluster.Id;
+                loc.ClusterName = cluster.Name ?? "";
+                loc.LocationType = cluster.TypeId == 1 ? "Indoor" : cluster.TypeId == 2 ? "Outdoor" : "";
+                loc.Power = cluster.PowerSupplyId switch { 1 => "24 V", 2 => "110 V", 3 => "110→24 V", _ => "" };
+                var wired = lines.Where(l => l.ClusterId == cluster.Id && l.AssetId > 0 && l.AttributeId > 0)
+                                 .OrderBy(l => CardSortKey(l.CardName)).ThenBy(l => l.Number).ToList();
+                foreach (var l in wired)
+                {
+                    mapByAttr.TryGetValue(l.AttributeId!.Value, out var m);
+                    string kind;
+                    if (m != null) kind = string.Equals(m.Kind?.Trim(), MaterialPositioning.KindCurrent, StringComparison.OrdinalIgnoreCase) ? MaterialPositioning.KindCurrent : MaterialPositioning.KindVoltage;
+                    else if (l.IsDigital == true || (l.CardName ?? "").StartsWith("DI-", StringComparison.OrdinalIgnoreCase)) kind = "DI";
+                    else if (l.ValueType == (int)Utility.Utility.ValueType.Current) kind = MaterialPositioning.KindCurrent;
+                    else if (l.ValueType == (int)Utility.Utility.ValueType.Voltage) kind = MaterialPositioning.KindVoltage;
+                    else kind = IsCurrentAttribute(l) ? MaterialPositioning.KindCurrent : MaterialPositioning.KindVoltage;
+
+                    loc.WiredPoints.Add(new WiredPoint
+                    {
+                        Asset = (l.AssetName ?? "").Trim(), AssetType = (l.AssetTypeName ?? m?.AssetTypeName ?? "").Trim(),
+                        Title = (l.AttributeName ?? "").Trim(), Kind = kind,
+                        Type = m?.Type?.Trim() ?? "", Card = l.CardName ?? "", Line = l.Number, InMapping = m != null
+                    });
+                    if (m == null) continue;   // planned-vs-wired compares only attributes the survey can plan
+                    var key = MaterialPositioning.SensorKey(kind, m.Type);
+                    loc.ActualSensors[key] = loc.ActualSensors.GetValueOrDefault(key) + 1;
+                    if (kind == MaterialPositioning.KindVoltage) loc.ActualVoltage++; else loc.ActualCurrent++;
+                }
+                var cardNames = wired.Select(l => l.CardName ?? "").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                loc.ActualVoltageCards = cardNames.Count(n => n.StartsWith("MintCard-", StringComparison.OrdinalIgnoreCase));
+                loc.ActualCurrentCards = cardNames.Count(n => n.StartsWith("C-", StringComparison.OrdinalIgnoreCase));
+                // e7mriv2web "Type Card" / "FTU Type": cards in use per type, × 10 channels
+                var byType = cardNames.GroupBy(n => n.Split('-')[0]).OrderBy(g => g.Key).ToList();
+                loc.WiredTypeCard = string.Join(", ", byType.Select(g => $"{g.Key}({g.Count()})"));
+                loc.WiredFtuChannels = cardNames.Count * MaterialPositioning.PinsPerCard;
+            }
+        }
+
+        // ── AJAX: Material tab ──
+        public async Task<JsonResult> GetMaterialPositioning(int siteId, decimal spare = 0)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (siteId <= 0) return Json(new { error = "Select a station first." });
+                if (spare < 0 || spare > 100) return Json(new { error = "Spare must be 0–100 %." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                return Json(await BuildMaterialPositioning(hcf, siteId, spare, loginUser));
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
+        }
+
+        // ── Printable Material Positioning report (browser Print → PDF) ──
+        public async Task<IActionResult> MaterialReport(int siteId, decimal spare = 0)
+        {
+            var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+            if (loginUser == null) return RedirectToAction("Index", "Login");
+            if (siteId <= 0) return BadRequest("Select a station first.");
+            if (spare < 0 || spare > 100) return BadRequest("Spare must be 0–100 %.");
+            using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+            return View(await BuildMaterialPositioning(hcf, siteId, spare, loginUser));
+        }
+
+        // ── Styled Excel workbook (.xlsx) ──
+        public async Task<IActionResult> MaterialExcel(int siteId, decimal spare = 0)
+        {
+            var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+            if (loginUser == null) return RedirectToAction("Index", "Login");
+            if (siteId <= 0) return BadRequest("Select a station first.");
+            if (spare < 0 || spare > 100) return BadRequest("Spare must be 0–100 %.");
+            using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+            var model = await BuildMaterialPositioning(hcf, siteId, spare, loginUser);
+            var name = string.Concat((string.IsNullOrWhiteSpace(model.StationCode) ? model.StationName : model.StationCode)
+                                     .Select(ch => System.IO.Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));
+            return File(MaterialPositioningExcel.Build(model),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        $"MaterialPositioning_{name}_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+        }
+
+        /// <summary>
+        /// Card pin rules, checked when a line is wired:
+        ///   C-n        : all 10 lines current only.
+        ///   MintCard-n : lines 1-8 voltage only, lines 9-10 current only;
+        ///                lines 9-10 stay blank while the card carries an axle-counter point.
+        /// Attributes not in AttributeSensorMapping (e.g. datalogger) and other card types are not checked.
+        /// </summary>
+        private static string? PinRuleError(string? cardName, List<(int number, int attributeId)> wiredOnCard, Dictionary<int, AttributeSensorMapping> mapByAttr)
+        {
+            cardName ??= "";
+            bool isCurrentCard = cardName.StartsWith("C-", StringComparison.OrdinalIgnoreCase);
+            bool isVoltageCard = cardName.StartsWith("MintCard-", StringComparison.OrdinalIgnoreCase);
+            if (!isCurrentCard && !isVoltageCard) return null;
+
+            bool Is(AttributeSensorMapping m, string kind) => string.Equals(m.Kind?.Trim(), kind, StringComparison.OrdinalIgnoreCase);
+            var known = wiredOnCard.Where(w => mapByAttr.ContainsKey(w.attributeId))
+                                   .Select(w => (w.number, m: mapByAttr[w.attributeId])).ToList();
+            bool hasAxle = known.Any(k => k.m.AssetTypeId == (int)Utility.Utility.AssetType.AXLE_COUNTER);
+            foreach (var (number, m) in known)
+            {
+                var what = $"Line {number} ({m.Title?.Trim()}, {m.Kind?.Trim()})";
+                if (isCurrentCard && Is(m, MaterialPositioning.KindVoltage))
+                    return $"{what}: a current card takes current inputs only. Use a MintCard line 1–8.";
+                if (isVoltageCard && number <= MaterialPositioning.VoltagePinsPerCard && Is(m, MaterialPositioning.KindCurrent))
+                    return $"{what}: MintCard lines 1–8 are for voltage only. Use line 9–10 or a current card.";
+                if (isVoltageCard && number > MaterialPositioning.VoltagePinsPerCard && Is(m, MaterialPositioning.KindVoltage))
+                    return $"{what}: MintCard lines 9–10 are for current only.";
+                if (isVoltageCard && number > MaterialPositioning.VoltagePinsPerCard && hasAxle)
+                    return $"{what}: this MintCard carries axle-counter points, so lines 9–10 stay blank.";
+            }
+            return null;
         }
 
         // ── Uploaded files live on the API server; build their public root from APIBaseUrl ──
@@ -1563,6 +2271,47 @@ namespace Energy7.StationSurvey.Controllers
                 // TODO: _logger.LogError(ex, "SaveSite failed");
                 return Json(new { error = "Internal server error." });
             }
+        }
+
+        // ── Project details (SiteProjectInfo table). Degrades to { ready = false } until the API side
+        //    (table + api/SiteProjectInfo endpoints) is deployed, so the New Station form never breaks. ──
+        public async Task<JsonResult> GetProjectInfo(int siteId)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (siteId <= 0) return Json(new { error = "Select a station." });
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                var resp = await hcf.Client.GetAsync($"SiteProjectInfo/SiteId/{siteId}");
+                if (resp.StatusCode != HttpStatusCode.OK) return Json(new { ready = false });   // API not deployed yet
+                var body = await resp.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(body) || body == "null") return Json(new { });
+                var info = JsonConvert.DeserializeObject<SiteProjectInfo>(body);
+                return Json(info);
+            }
+            catch { return Json(new { ready = false }); }
+        }
+
+        [HttpPost]
+        public async Task<JsonResult> SaveProjectInfo([FromBody] SiteProjectInfo m)
+        {
+            try
+            {
+                var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
+                if (loginUser == null) return Json(new { error = "Session expired." });
+                if (m == null || m.SiteId <= 0) return Json(new { error = "Select a station." });
+                m.CreatedBy = loginUser.Id;
+                if (m.PcclStarted == true) { m.PcclStartedBy = loginUser.Id; m.PcclStartedDate = DateTime.Now; }
+                using var hcf = new HttpClientHelper(_config, _httpContextAccessor, token: loginUser.Token);
+                using var str = new StringContent(JsonConvert.SerializeObject(m), Encoding.UTF8, "application/json");
+                var resp = await hcf.Client.PostAsync("SiteProjectInfo", str);
+                if (resp.StatusCode == HttpStatusCode.NotFound) return Json(new { ready = false });   // API not built yet
+                if (resp.StatusCode != HttpStatusCode.OK && resp.StatusCode != HttpStatusCode.NoContent)
+                    return Json(new { error = await ApiErrorMessage(resp) });
+                return Json(new { success = true });
+            }
+            catch (Exception ex) { return Json(new { error = ex.Message }); }
         }
 
         /// <summary>Copies the fields shown on the station modal (same set as the 90 Edit Site page).</summary>
