@@ -436,6 +436,9 @@
           inp.type       = inp.type === 'password' ? 'text' : 'password';
           icon.className = inp.type === 'text' ? 'bi bi-eye-slash' : 'bi bi-eye';
         }
+
+        // New session starts clean: drop any remembered Zone/Division/Station selection.
+        try { localStorage.removeItem('e7_sel'); } catch (e) { }
     </script>
 </body>
 </html>

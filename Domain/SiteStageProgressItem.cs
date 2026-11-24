@@ -15,6 +15,7 @@ namespace Domain
         public int SiteStageProgressId { get; set; }
         public int SiteId { get; set; }
         public int ProjectStageId { get; set; }
+        public int? ClusterId { get; set; }      // the location (dbo.Cluster) this line belongs to
 
         public string RefType { get; set; }      // COMPONENT | ASSETTYPE | ATTRIBUTE | ASSET | LOCATION
         public int? RefId { get; set; }

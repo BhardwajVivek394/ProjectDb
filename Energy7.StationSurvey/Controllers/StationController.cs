@@ -191,10 +191,46 @@ namespace Energy7.StationSurvey.Controllers
             {
                 var sites = _siteService.GetAll() ?? new List<Site>();
                 sites.Insert(0, new Site { Id = 0, Name = "Select Station" });
-                ViewBag.Sites = new SelectList(sites, "Id", "Name");
+                // Completed (non-project) stations — IsProject false or null — are read-only.
+                // Label them "(Completed)" in the dropdown so they read as finished sites
+                // before selection, and expose their ids so the view can badge + lock them.
+                ViewBag.Sites = new SelectList(
+                    sites.Select(s => new
+                    {
+                        Id = s.Id,
+                        Name = (s.Id > 0 && s.IsProject != true) ? (s.Name + " (Completed)") : s.Name
+                    }), "Id", "Name");
+
+                ViewBag.CompletedSiteIds = sites
+                    .Where(s => s.Id > 0 && s.IsProject != true)
+                    .Select(s => s.Id)
+                    .ToArray();
             }
-            catch { ViewBag.Sites = new SelectList(new List<Site>(), "Id", "Name"); }
+            catch
+            {
+                ViewBag.Sites = new SelectList(new List<Site>(), "Id", "Name");
+                ViewBag.CompletedSiteIds = new int[0];
+            }
         }
+
+        // ── Completed-site guard ──────────────────────────────────────────────
+        // A station whose IsProject is false or null is a completed (non-project)
+        // site and is read-only: every survey / asset / location / yard / material /
+        // document update is rejected. Only live project stations (IsProject == true)
+        // may be edited.
+        private bool IsSiteLocked(int siteId)
+        {
+            if (siteId <= 0) return false;
+            try
+            {
+                var site = _siteService.Get(siteId);
+                return site != null && site.Id > 0 && site.IsProject != true;
+            }
+            catch { return false; }   // never block an update because the lookup failed
+        }
+
+        private static JsonResult SiteLockedJson()
+            => new JsonResult(new { error = "This station is marked Completed and is read-only. Updates are not allowed." });
 
         public JsonResult GetAllAssetType()
         {
@@ -303,6 +339,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> SaveAsset([FromBody] Asset mAsset)
         {
+            if (IsSiteLocked(mAsset?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -464,6 +501,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> SaveSurvey([FromBody] SurveySaveRequest m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             var done = 0;
             try
             {
@@ -797,6 +835,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> SaveLocation([FromBody] LocationSave m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -863,6 +902,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> DeleteLocation([FromBody] DeleteLocationRequest m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -931,6 +971,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> SaveSurveyChecklistItem([FromBody] SurveyItemUpdate update)
         {
+            if (IsSiteLocked(update?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -1021,6 +1062,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> UpdateCardLineLocation([FromBody] CardLine mCardLine)
         {
+            if (IsSiteLocked(mCardLine?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -1244,6 +1286,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> AddClusterCard([FromBody] AddCardRequest m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -1319,6 +1362,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> AddClusterAdc([FromBody] AddAdcRequest m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -1375,6 +1419,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> GenerateYardForCluster([FromBody] GenerateYardRequest m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -1579,6 +1624,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> WireCardLine([FromBody] WireCardLineRequest m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -1674,6 +1720,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> SaveCardLines([FromBody] SaveCardLinesRequest m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -2050,6 +2097,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> UploadNMDL([FromBody] UploadNmdlDto m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -2131,6 +2179,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> UploadLocationPhoto([FromBody] UploadPhotoDto m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);
@@ -2234,6 +2283,10 @@ namespace Energy7.StationSurvey.Controllers
                     if (existing == null || existing.Id != mSite.Id)
                         return Json(new { error = "Could not load the station for editing." });
 
+                    // A completed (non-project) station — IsProject false or null — is read-only.
+                    if (existing.IsProject != true)
+                        return Json(new { error = "This station is marked Completed and is read-only. Updates are not allowed." });
+
                     ApplyEditableFields(existing, mSite);
                     // Edit: "Project Completed" ticked → IsProject = false, otherwise stays a project station
                     existing.IsProject = mSite.IsProject ?? true;
@@ -2296,6 +2349,7 @@ namespace Energy7.StationSurvey.Controllers
         [HttpPost]
         public async Task<JsonResult> SaveProjectInfo([FromBody] SiteProjectInfo m)
         {
+            if (IsSiteLocked(m?.SiteId ?? 0)) return SiteLockedJson();
             try
             {
                 var loginUser = ClsHttpContent.GetLoginUser(HttpContext);

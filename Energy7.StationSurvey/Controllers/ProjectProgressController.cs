@@ -143,10 +143,16 @@ namespace Energy7.StationSurvey.Controllers
 
                 var body = await resp.Content.ReadAsStringAsync();
                 if (string.IsNullOrWhiteSpace(body) || body == "null")
-                    return Json(new { ready = true, siteId, stages = new List<SiteStageProgress>() });
+                    return Json(new { ready = true, siteId, locations = new List<ProgressLocation>(), stages = new List<SiteStageProgress>() });
 
                 var prog = JsonConvert.DeserializeObject<SiteProgress>(body);
-                return Json(new { ready = true, siteId, stages = prog?.Stages ?? new List<SiteStageProgress>() });
+                return Json(new
+                {
+                    ready = true,
+                    siteId,
+                    locations = prog?.Locations ?? new List<ProgressLocation>(),
+                    stages = prog?.Stages ?? new List<SiteStageProgress>()
+                });
             }
             catch { return Json(new { ready = false }); }
         }

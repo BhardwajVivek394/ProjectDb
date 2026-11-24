@@ -40,6 +40,12 @@
 <!-- ═══ TAB CONTENT ═══ -->
 <div class="econt">
 
+    <!-- Read-only banner shown for completed (non-project) stations -->
+    <div id="stationLockBanner" class="station-lock-banner" style="display:none">
+        <i class="bi bi-lock-fill"></i>
+        <span>This station is marked <b>Completed</b> and is read-only. Updates are disabled.</span>
+    </div>
+
     <!-- ── OVERVIEW ── -->
     <div class="tp on" id="tab-overview">
         <div class="sgrid">
@@ -714,6 +720,71 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
 
+        // ══ Completed-site lock ════════════════════════════════════════════════════════
+        // A station whose IsProject is false or null is a completed (non-project) site.
+        // Those stations are read-only: the UI badges them "Completed", disables Edit, and
+        // every mutating request is blocked (also enforced server-side in StationController).
+        var __completedSites = {};          // { siteId: true } for completed stations
+        var __siteLocked     = false;       // is the currently selected station read-only?
+
+        (function () {
+            var ids = @Json.Serialize(ViewBag.CompletedSiteIds ?? new int[0]);
+            if (ids && ids.length) ids.forEach(function (id) { __completedSites[id] = true; });
+        })();
+
+        function isSiteCompleted(siteId) {
+            siteId = parseInt(siteId, 10) || 0;
+            return siteId > 0 && __completedSites[siteId] === true;
+        }
+
+        // Block every mutating POST to the Station controller when the station is completed.
+        // Covers all jQuery saves/deletes across every tab from one place; the station Edit
+        // modal (fetch-based) is gated by the disabled Edit button and the server guard.
+        var __lockedEndpoints = /\/Station\/(SaveAsset|SaveSurvey|SaveLocation|DeleteLocation|SaveSurveyChecklistItem|UpdateCardLineLocation|AddClusterCard|AddClusterAdc|GenerateYardForCluster|WireCardLine|SaveCardLines|UploadNMDL|DeleteNMDL|UploadLocationPhoto|DeleteLocationPhoto|SaveSite|SaveProjectInfo)(\b|\?|$)/i;
+        $.ajaxPrefilter(function (options, originalOptions, jqXHR) {
+            if (__siteLocked
+                && (options.type || 'GET').toUpperCase() === 'POST'
+                && __lockedEndpoints.test(options.url || '')) {
+                if (window.E7 && E7.error) E7.error('This station is marked Completed and is read-only. Updates are not allowed.');
+                jqXHR.abort();
+            }
+        });
+
+        // Apply / clear the read-only state for the selected station.
+        function applyStationLock(locked) {
+            __siteLocked = !!locked;
+            var $badge = $('#badgeStatus').closest('.sbadge');
+            $badge.toggleClass('sbadge-completed', __siteLocked);
+            $('#stationLockBanner').toggle(__siteLocked);
+            $('.econt').toggleClass('station-locked', __siteLocked);
+            if (__siteLocked) $('#btnEditStation').prop('disabled', true);
+        }
+
+        // ── Remember the Zone / Division / Station selection for this browser session ──
+        // Stored in localStorage (shared with the Project Progress page, same origin) and cleared on
+        // logout / at the login page, so the selected station stays put while moving between pages.
+        function e7SaveSel() {
+            try {
+                localStorage.setItem('e7_sel', JSON.stringify({
+                    zoneId: $('#ddZone').val() || '',
+                    divisionId: $('#ddDivision').val() || '',
+                    siteId: $('#ddStation').val() || ''
+                }));
+            } catch (e) { }
+        }
+        function e7ReadSel() { try { return JSON.parse(localStorage.getItem('e7_sel') || 'null'); } catch (e) { return null; } }
+
+        // Restore on load: the dropdowns are server-rendered with every zone/division/station, so the
+        // stored values can be set directly, then load the station.
+        $(function () {
+            var sel = e7ReadSel();
+            if (!sel || !sel.siteId || sel.siteId === '0') return;
+            $('#ddZone').val(sel.zoneId || '0');
+            $('#ddDivision').val(sel.divisionId || '0');
+            $('#ddStation').val(String(sel.siteId));
+            if ($('#ddStation').val() === String(sel.siteId)) onStationChange(sel.siteId);
+        });
+
         // ── Zone → Division cascade ───────────────────────────────────────────────────
         function onZoneChange(zoneId) {
             $.ajax({
@@ -727,6 +798,7 @@
                     });
                     $('#ddStation').empty().append('<option value="0">Select Station</option>');
                     resetStats();
+                    e7SaveSel();
                 }
             });
         }
@@ -740,9 +812,15 @@
                     var dd = $('#ddStation');
                     dd.empty().append('<option value="0">Select Station</option>');
                     $.each(data, function (i, s) {
-                        dd.append('<option value="' + s.id + '">' + s.name + '</option>');
+                        // Only IsProject = 1/true is an active project; 0, false or null → Completed (read-only)
+                        var active    = (s.isProject === true || s.isProject === 1);
+                        var completed = !active;
+                        __completedSites[s.id] = completed;
+                        var label = s.name + (completed ? ' (Completed)' : '');
+                        dd.append('<option value="' + s.id + '">' + label + '</option>');
                     });
                     resetStats();
+                    e7SaveSel();
                 }
             });
         }
@@ -755,13 +833,18 @@
                 $('#ddStation').val(SV.siteId);   // stay on the current station
                 return;
             }
-            debugger;
-            var stationName  = $('#ddStation option:selected').text();
+            e7SaveSel();
+            // Strip the "(Completed)" dropdown label back off for the station name itself
+            var stationName  = $('#ddStation option:selected').text().replace(/\s*\(Completed\)\s*$/, '');
             var zoneName     = $('#ddZone option:selected').text();
             var divisionName = $('#ddDivision option:selected').text();
 
-            $('#btnEditStation').prop('disabled', !siteId || siteId == 0);
+            var completed = isSiteCompleted(siteId);
+            // Completed stations are read-only — keep Edit disabled even when one is selected
+            $('#btnEditStation').prop('disabled', !siteId || siteId == 0 || completed);
             if (!siteId || siteId == 0) {
+                applyStationLock(false);
+                $('#badgeStatus').text('Select Station');
                 resetStats();
                 $('#surveyList').html('<div style="color:var(--txm);font-size:11px">Select a station</div>');
                 $('#surveyProgress, #surveyStageBadge').text('').css('background', '');
@@ -772,6 +855,10 @@
                 svReset();
                 return;
             }
+
+            // Show status + lock the whole station when it is a completed (non-project) site
+            $('#badgeStatus').text(completed ? 'Completed' : 'In Progress');
+            applyStationLock(completed);
 
             // Update info panel immediately
             $('#infoName').text(stationName);
@@ -4263,5 +4350,30 @@
             to {
                 transform: rotate(360deg);
             }
-        }</style>
+        }
+
+        /* ── Completed-site read-only state ───────────────────────────────── */
+        .sbadge.sbadge-completed { background: var(--ok); color: #fff; }
+        .sbadge.sbadge-completed .dot { background: #fff; }
+
+        .station-lock-banner {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--bd-lt); border: 1px solid var(--bd);
+            border-left: 3px solid var(--ok);
+            color: var(--txm); font-size: 12px; font-weight: 500;
+            padding: 8px 12px; border-radius: 6px; margin-bottom: 12px;
+        }
+        .station-lock-banner i { color: var(--ok); font-size: 14px; }
+        .station-lock-banner b { color: var(--tx); }
+
+        /* Grey out the mutating controls (save / add / delete) while keeping
+           navigation and read-only inspection usable. Saves are also blocked
+           by the AJAX guard and server-side, so this is a visual cue. */
+        .econt.station-locked .be7,
+        .econt.station-locked .sv-btn,
+        .econt.station-locked .nmdl-del,
+        .econt.station-locked .ph-del,
+        .econt.station-locked .sv-ib.del {
+            pointer-events: none; opacity: .4; filter: grayscale(.4); cursor: not-allowed;
+        }
 }
